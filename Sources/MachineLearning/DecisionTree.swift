@@ -1367,7 +1367,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         }
         
         let att = bestAttIndex
-        print("Final Cost \(bestCost)")
+        //print("Final Cost \(bestCost)")
         //return Rule.PCRegion([PCRegionRule(region: Circle(center: (x : bestParameters[0], y : bestParameters[1]), radius: bestParameters[2]), attributes: att, axisSeperation : 0.5, axisMin : [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax : [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
         return Rule.PCRegion([PCRegionRule(region: Rectangle(left: bestParameters[0], right: bestParameters[2], top: bestParameters[1], bottom: bestParameters[3]), attributes: att, axisSeperation: 0.5, axisMin: [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax: [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
     }
@@ -1525,7 +1525,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
         }
         
         let att = bestAttIndex
-        print("Final Cost \(bestCost)")
+        //print("Final Cost \(bestCost)")
         return Rule.PCRegion([PCRegionRule(region: Rectangle(left: bestParameters[0], right: bestParameters[2], top: bestParameters[1], bottom: bestParameters[3]), attributes: att, axisSeperation: 0.5, axisMin: [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax: [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
     }
     
@@ -1627,7 +1627,7 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil) -> Rule? {
 	if(bestGainRatio == nil || bestGainRatio! < 0.0001) {
 		return nil
 	}
-    print("Gain Ratio \(bestGainRatio!)")
+    //print("Gain Ratio \(bestGainRatio!)")
 	return Rule.AxisSelection([AxisSelectionRule(rangeMin : bestMin, rangeMax : bestMax, axisIndex : bestAttribute)])
 }
 
