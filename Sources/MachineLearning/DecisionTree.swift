@@ -1309,64 +1309,92 @@ extension ParallelCoordinatesSplit {
     }
     
     mutating func CalculateBestSingleSplits() {
-        bestSingleSplits = Array(repeating: [], count: 2)
-        for attribute in 0...1 {
-            let a = dataset.attributes[abs(currentAttributes[attribute])]
-            let (split, _) = findBestSplit(data: dataset, attribute: abs(currentAttributes[attribute]))
+        var bestSingleSplits : [[Double]] = Array(repeating: [], count: dataset.numAttributes())
+        let sema = DispatchSemaphore(value: 1)
+        let group = DispatchGroup()
+        let d = dataset
+        for attribute in 0..<dataset.numAttributes() {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let data = DataSet(dataset: d, copyInstances: true)
+                let a = data.attributes[attribute]
+                let (split, _) = findBestSplit(data: data, attribute: attribute)
             
-            
-            if let s = split {
-                switch s {
-                case let .AxisSelection(selection):
-                    var top = 1.0
-                    var bottom = 0.0
-                    if let m = selection.first?.rangeMax {
-                        top = (m - a.min!)/(a.max! - a.min!)
+                if let s = split {
+                    switch s {
+                    case let .AxisSelection(selection):
+                        var top = 1.0
+                        var bottom = 0.0
+                        if let m = selection.first?.rangeMax {
+                            top = (m - a.min!)/(a.max! - a.min!)
+                        }
+                        if let m = selection.first?.rangeMin {
+                            bottom = (m - a.min!)/(a.max! - a.min!)
+                        }
+                        /*if(currentAttributes[attribute] < 0) {
+                         top = 1.0 - top
+                         bottom = 1.0 - bottom
+                         }*/
+                        bestSingleSplits[attribute] = [0, top, 0.01, bottom]
+                        /*if(attribute == 0) {
+                         bestSingleSplits![0] = [0, top, 0.01, bottom]
+                         }
+                         else {
+                         bestSingleSplits![1] = [0.99, top, 1.0, bottom]
+                         }*/
+                        //bestSingleSplits![attribute] = [Double(attribtue), ]//[Double(attribute), (top+bottom)/2.0, 0.01, abs(top-bottom)]
+                    default:
+                        print("error")
                     }
-                    if let m = selection.first?.rangeMin {
-                        bottom = (m - a.min!)/(a.max! - a.min!)
-                    }
-                    if(currentAttributes[attribute] < 0) {
-                        top = 1.0 - top
-                        bottom = 1.0 - bottom
-                    }
-                    if(attribute == 0) {
-                        bestSingleSplits![0] = [0, top, 0.01, bottom]
-                    }
-                    else {
-                        bestSingleSplits![1] = [0.99, top, 1.0, bottom]
-                    }
-                    //bestSingleSplits![attribute] = [Double(attribtue), ]//[Double(attribute), (top+bottom)/2.0, 0.01, abs(top-bottom)]
-                default:
-                    print("error")
                 }
+                group.leave()
             }
         }
+        group.wait()
+        self.bestSingleSplits = bestSingleSplits
     }
 }
 
 public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoordinatesSplit {
     mutating func GetInitialCandidate() -> [Double] {
-        if(bestSingleSplits == nil) {
-            CalculateBestSingleSplits()
+        var result : [Double] = []
+        if(Bool.random()) {
+            result = bestSingleSplits![abs(currentAttributes[0])]
+            if(currentAttributes[0] < 0 && result.count == 4) {
+                result[1] = 1.0 - result[1]
+                result[3] = 1.0 - result[3]
+            }
         }
-        return bestSingleSplits![Int.random(in: 0...1)]
+        else {
+            result = bestSingleSplits![abs(currentAttributes[1])]
+            if(result.count == 4) {
+                result[0] = 0.99
+                result[2] = 1.0
+                if(currentAttributes[1] < 0) {
+                    result[1] = 1.0 - result[1]
+                    result[3] = 1.0 - result[3]
+                }
+            }
+        }
+        return result
     }
     
     public mutating func getRule() -> Rule? {
         var bestAttIndex = [0,1]
         var bestCost = Double.infinity
         var bestParameters : [Double] = []
+        var bestIsFlipped = false
         let sema = DispatchSemaphore(value: 1)
         let group = DispatchGroup()
+        CalculateBestSingleSplits()
         var cp = self
         for i in 0..<dataset.numAttributes() {
             for j in (i+1)..<dataset.numAttributes() {
+                for k in [false,true] {
                 group.enter()
                 DispatchQueue.global(qos: .userInitiated).async {
                     var copy = cp
-                    copy.currentAttributes = [i, j]
-                    copy.bestSingleSplits = nil
+                    copy.currentAttributes = [i, k ? -j : j]
                     copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
                     var parameters = copy.Optimize(iterations: 100, populationSize: 50, mutationFactor: 0.6, crossoverFactor: 0.4, percentageInitialProvided: 0.15)
                     let c = copy.EvaluateCost(parameters: parameters)
@@ -1374,10 +1402,12 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
                     if(c < bestCost) {
                         bestCost = c
                         bestAttIndex = [i,j]
+                        bestIsFlipped = k
                         bestParameters = parameters
                     }
                     sema.signal()
                     group.leave()
+                    }
                 }
             }
         }
@@ -1391,7 +1421,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         let att = bestAttIndex
         //print("Final Cost \(bestCost)")
         //return Rule.PCRegion([PCRegionRule(region: Circle(center: (x : bestParameters[0], y : bestParameters[1]), radius: bestParameters[2]), attributes: att, axisSeperation : 0.5, axisMin : [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax : [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
-        return Rule.PCRegion([PCRegionRule(region: Rectangle(left: bestParameters[0], right: bestParameters[2], top: bestParameters[1], bottom: bestParameters[3]), attributes: att, axisSeperation: 0.5, axisMin: [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax: [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
+        return Rule.PCRegion([PCRegionRule(region: Rectangle(left: bestParameters[0], right: bestParameters[2], top: bestParameters[1], bottom: bestParameters[3]), attributes: att, axisSeperation: 0.5, axisMin: [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax: [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,bestIsFlipped])])
     }
     
     public init(dataset : DataSet) {
@@ -1468,6 +1498,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
         var bestParameters : [Double] = []
         let sema = DispatchSemaphore(value: 1)
         let group = DispatchGroup()
+        CalculateBestSingleSplits()
         var cp = self
         for i in 0..<dataset.numAttributes() {
             for j in (i+1)..<dataset.numAttributes() {
@@ -1475,11 +1506,9 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
                 DispatchQueue.global(qos: .userInitiated).async {
                 var copy = cp
                 copy.currentAttributes = [i, j]
-                copy.bestSingleSplits = nil
                 copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
                 
-                copy.CalculateBestSingleSplits()
-                var currentCandidate = copy.bestSingleSplits![0]
+                    var currentCandidate = copy.bestSingleSplits![copy.currentAttributes[0]]
                     if(currentCandidate.count == 0) {
                         currentCandidate = [Double.random(in: 0...1), Double.random(in: 0...1), Double.random(in: 0...1), Double.random(in: 0...1)]
                     }
