@@ -1,5 +1,6 @@
 import MachineLearning
 import Foundation
+import Signals
 
 //taken from https://stackoverflow.com/questions/49470358/how-can-i-return-a-float-or-double-from-normal-distribution-in-swift-4
 class MyGaussianDistribution {
@@ -73,11 +74,30 @@ let resultsLocation = datasetLocation+"results/c45/"
 
 //generateMostlyRandom(numAttributes: 1000, numNonRandom: 5, numInstances: 200).saveAsCSV(file: datasetLocation+"generated1.csv")
 
-let datasets = ["iris", "breast-cancer-wisconsin", "glass", "vehicle", "vowel", "heart", "credit", "wine", "ionosphere", "car", "liver", "page-blocks", "ecoli", "seeds", "cryotherapy"]
+let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere"]
 let NUM_RUNS = 5
 
+func printDatasetStats(datasets : [String]) {
+    for d in datasets {
+        guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
+            print("couldn't load file \(datasetLocation+d+".csv")")
+            continue
+        }
+        print("\(d)\t\(data.instances.count)\t\(data.attributes.count)\t\(data.classes.count)")
+    }
+}
+
+//printDatasetStats(datasets: datasets)
+
+let progress = CrossValidationProgress()
+
+Signals.trap(signal: Signals.Signal.user(Int(SIGUSR1))) { _ in
+    let p = progress.progress()
+    print("\(String(format: "%.3f", p.complete*100.0))% of run complete in \(String(format: "%.1f seconds", p.time))")
+}
+
 for d in datasets {
-    guard let data = loadFromFile(file: datasetLocation+d+".csv") else {
+    guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
         print("couldn't load file \(datasetLocation+d+".csv")")
         continue
     }
@@ -94,7 +114,7 @@ for d in datasets {
     }
     for i in 0..<NUM_RUNS {
         let start = Date().timeIntervalSince1970
-        let result = crossValidation(data: data, buildMethod: .C45)
+        let result = crossValidation(data: data, buildMethod: .DE, progress: progress)
         fMeasure.append(average(a: result.map {$0.macroFMeasure()}))
         treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
         deepestLeaf.append(average(a: result.map {Double($0.tree.deepestLeaf())}))

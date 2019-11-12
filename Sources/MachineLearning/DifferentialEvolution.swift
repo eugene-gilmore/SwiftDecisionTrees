@@ -15,7 +15,7 @@ protocol DifferentialEvolution {
 }
 
 extension DifferentialEvolution {
-    mutating func Optimize(iterations : Int, populationSize : Int, mutationFactor : Double, crossoverFactor : Double, percentageInitialProvided : Double) -> [Double] {
+    mutating func Optimize(iterations : Int, populationSize : Int, mutationFactor : Double, crossoverFactor : Double, percentageInitialProvided : Double, onIterationComplete : (() -> Void)? = nil) -> [Double] {
         var population = [[Double]](repeating: [Double](repeating: 0, count: NumberOfParameters()), count: populationSize)
         let constraints = GetConstraints()
         var minCostPerAgent = [Double](repeating: 0, count: populationSize)
@@ -100,6 +100,9 @@ extension DifferentialEvolution {
                     bestAgentIndex = x
                 }
                 x += 1
+            }
+            if let complete = onIterationComplete {
+                complete()
             }
             //print("Current cost \(minCost)")
         }

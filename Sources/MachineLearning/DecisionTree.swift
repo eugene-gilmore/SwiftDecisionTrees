@@ -1355,6 +1355,39 @@ extension ParallelCoordinatesSplit {
     }
 }
 
+public class Progress {
+    init(tasks : Int) {
+        numTasks = tasks
+        sema = DispatchSemaphore(value: 1)
+        startTime = Date().timeIntervalSince1970
+        tasksComplete = 0
+    }
+    
+    func reset(tasks: Int) {
+        numTasks = tasks
+        startTime = Date().timeIntervalSince1970
+        tasksComplete = 0
+    }
+    
+    func taskComplete() {
+        sema.wait()
+        tasksComplete += 1
+        sema.signal()
+    }
+    
+    func progress() -> (complete : Double, time : Double) {
+        if(numTasks == 0) {
+            return (1.0, Date().timeIntervalSince1970-startTime)
+        }
+        return (Double(tasksComplete)/Double(numTasks), Date().timeIntervalSince1970-startTime)
+    }
+    
+    private var numTasks : Int
+    private var tasksComplete : Int
+    private var startTime : Double
+    private var sema : DispatchSemaphore
+}
+
 public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoordinatesSplit {
     mutating func GetInitialCandidate() -> [Double] {
         var result : [Double] = []
@@ -1379,13 +1412,14 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         return result
     }
     
-    public mutating func getRule() -> Rule? {
+    public mutating func getRule(progress: Progress?) -> Rule? {
         var bestAttIndex = [0,1]
         var bestCost = Double.infinity
         var bestParameters : [Double] = []
         var bestIsFlipped = false
         let sema = DispatchSemaphore(value: 1)
         let group = DispatchGroup()
+        progress?.reset(tasks: 100*50*dataset.numAttributes()*(dataset.numAttributes()-1))
         CalculateBestSingleSplits()
         var cp = self
         for i in 0..<dataset.numAttributes() {
@@ -1396,7 +1430,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
                     var copy = cp
                     copy.currentAttributes = [i, k ? -j : j]
                     copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
-                    var parameters = copy.Optimize(iterations: 100, populationSize: 50, mutationFactor: 0.6, crossoverFactor: 0.4, percentageInitialProvided: 0.15)
+                    var parameters = copy.Optimize(iterations: 100, populationSize: 50, mutationFactor: 0.6, crossoverFactor: 0.4, percentageInitialProvided: 0.15, onIterationComplete: {progress?.taskComplete()})
                     let c = copy.EvaluateCost(parameters: parameters)
                     sema.wait()
                     if(c < bestCost) {
@@ -1852,7 +1886,7 @@ public enum BuildMethod {
     case HCR
 }
 
-public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: DataSet, buildMethod : BuildMethod) {
+public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: DataSet, buildMethod : BuildMethod, progress: Progress? = nil) {
     var insideInstances : DataSet? = nil
     if(!node.hasChildren()) {
         var stop = true
@@ -1870,7 +1904,7 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                 node.rules = findBestSplit(data: data).rule
             case .DE:
                 var x = DifferentialEvoluationSplit(dataset: data)
-                node.rules = x.getRule()
+                node.rules = x.getRule(progress: progress)
             case .HCF:
                 var hc = HillClimberSplit(dataset: data)
                 node.rules = hc.getRule()
@@ -1914,7 +1948,39 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
     finishSubTree(node: node.outsideChildRule!, data: insideRules(data: data, rules: rulesForNode(n: node.outsideChildRule!)), fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
 }
 
-public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : BuildMethod) -> [Result] {
+public class CrossValidationProgress {
+    public init() {
+        foldProgress = Progress(tasks: 0)
+        numFolds = 0
+        completedFolds = 0
+        startTime = Date().timeIntervalSince1970
+    }
+    
+    internal func reset(folds : Int) {
+        numFolds = folds
+        completedFolds = 0
+        startTime = Date().timeIntervalSince1970
+    }
+    
+    public func progress() -> (complete : Double, time : Double) {
+        if(numFolds == 0) {
+            return (1, Date().timeIntervalSince1970-startTime)
+        }
+        let complete = (Double(completedFolds) + foldProgress.progress().complete)/Double(numFolds)
+        return (complete, Date().timeIntervalSince1970-startTime)
+    }
+    
+    internal var numFolds : Int
+    internal var completedFolds : Int
+    internal var foldProgress : Progress
+    private var startTime : Double
+}
+
+public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : BuildMethod, progress : CrossValidationProgress? = nil) -> [Result] {
+    
+    if let p = progress {
+        p.reset(folds: folds)
+    }
     let copy = DataSet(dataset: data, copyInstances: true)
     var foldSets : [DataSet] = []
     for _ in 0..<folds {
@@ -1951,7 +2017,7 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
                 d.addPoint(point: instance)
             }
         }
-        finishSubTree(node: result[i].tree, data: d, fullTrainingSet: d, buildMethod: buildMethod)
+        finishSubTree(node: result[i].tree, data: d, fullTrainingSet: d, buildMethod: buildMethod, progress: progress?.foldProgress)
         pruneNode(node: result[i].tree, data: d)
         
         
@@ -1963,6 +2029,7 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
                 result[i].confusionMatrix[p][r] += 1
             }
         }
+        progress?.completedFolds += 1
     }
     
     return result
