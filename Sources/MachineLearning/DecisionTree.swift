@@ -327,7 +327,13 @@ public class DataSet {
                     }
                 }
             }
-            point.classIndex = getClassIndex(value: point.classVal)!
+            if let ci = getClassIndex(value: point.classVal) {
+                point.classIndex = ci
+            }
+            else {
+                classes.append((value: point.classVal, name: "\(point.classVal)"))
+                point.classIndex = classes.count - 1
+            }
         }
     }
     
@@ -341,6 +347,22 @@ public class DataSet {
     
     public func numAttributes() -> Int {
         return attributes.count
+    }
+    
+    public func saveAsCSV(file: String) {
+        var s = ""
+        for i in instances {
+            for v in i.values {
+                s += "\(v != nil ? String(format: "%.2f", v!) : "?"),"
+            }
+            s += "\(i.classVal)\n"
+        }
+        do {
+            try s.write(toFile: file, atomically: false, encoding: .utf8)
+        }
+        catch {
+            print("Error writing file")
+        }
     }
     
     public var description : String {get{return instances.description}}
@@ -1290,7 +1312,7 @@ extension ParallelCoordinatesSplit {
         bestSingleSplits = Array(repeating: [], count: 2)
         for attribute in 0...1 {
             let a = dataset.attributes[abs(currentAttributes[attribute])]
-            let split = findBestSplit(data: dataset, attribute: abs(currentAttributes[attribute]))
+            let (split, _) = findBestSplit(data: dataset, attribute: abs(currentAttributes[attribute]))
             
             
             if let s = split {
@@ -1537,7 +1559,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
     public var mode : Mode
 }
 
-public func findBestSplit(data : DataSet, attribute : Int? = nil) -> Rule? {
+public func findBestSplit(data : DataSet, attribute : Int? = nil) -> (rule: Rule?, gainRatio: Double) {
 	var bestGainRatio : Double? = nil
 	var bestAttribute : Int = 0
 	var bestMin : Double? = 0, bestMax : Double? = 0
@@ -1625,10 +1647,10 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil) -> Rule? {
 	}
     
 	if(bestGainRatio == nil || bestGainRatio! < 0.0001) {
-		return nil
+        return (rule: nil, gainRatio: 0.0)
 	}
     //print("Gain Ratio \(bestGainRatio!)")
-	return Rule.AxisSelection([AxisSelectionRule(rangeMin : bestMin, rangeMax : bestMax, axisIndex : bestAttribute)])
+    return (rule: Rule.AxisSelection([AxisSelectionRule(rangeMin : bestMin, rangeMax : bestMax, axisIndex : bestAttribute)]), gainRatio: bestGainRatio!)
 }
 
 public func rulesForNode(n : TreeNode) -> PathToNode {
@@ -1816,7 +1838,7 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
         if(!stop) {
             switch buildMethod {
             case .C45:
-                node.rules = findBestSplit(data: data)
+                node.rules = findBestSplit(data: data).rule
             case .DE:
                 var x = DifferentialEvoluationSplit(dataset: data)
                 node.rules = x.getRule()
@@ -1870,6 +1892,7 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
         foldSets.append(DataSet(dataset: data, copyInstances: false))
     }
     
+    copy.instances.shuffle()
     copy.instances.sort { (p1 : Point, p2 : Point) -> Bool in
         p1.classVal <= p2.classVal
     }
