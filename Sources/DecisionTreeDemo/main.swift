@@ -93,7 +93,7 @@ for d in datasets {
         return a.reduce(0.0, {$0 + $1})/Double(a.count)
     }
     for i in 0..<NUM_RUNS {
-        let start = CFAbsoluteTimeGetCurrent()
+        let start = Date().timeIntervalSince1970
         let result = crossValidation(data: data, buildMethod: .C45)
         fMeasure.append(average(a: result.map {$0.macroFMeasure()}))
         treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
@@ -102,7 +102,7 @@ for d in datasets {
         for r in 0..<result.count {
             result[r].tree.saveToFile(filename: resultsLocation+d+"-Run\(i+1)-Tree\(r)")
         }
-        print("Run \(i+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", CFAbsoluteTimeGetCurrent()-start))s)")
+        print("Run \(i+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", (Date().timeIntervalSince1970-start)))s)")
     }
     resultStr += resultString(run: nil, fMeasure: average(a: fMeasure), treeSize: average(a: treeSize), deepestLeaf: average(a: deepestLeaf))
     do {
