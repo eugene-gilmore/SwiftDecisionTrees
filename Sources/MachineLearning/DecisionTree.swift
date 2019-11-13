@@ -1299,7 +1299,7 @@ extension ParallelCoordinatesSplit {
         if(distribution.weightSubset(i: 0).isZero || distribution.weightSubset(i: 1).isZero) {
             return Double.infinity
         }
-        let g = gainRatio(distribution: distribution)
+        let g = gain(distribution: distribution)
         if(g < 0.00001) {
             return Double.infinity
         }
@@ -1412,7 +1412,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         return result
     }
     
-    public mutating func getRule(progress: Progress?) -> Rule? {
+    public mutating func getRule(progress: Progress? = nil) -> Rule? {
         var bestAttIndex = [0,1]
         var bestCost = Double.infinity
         var bestParameters : [Double] = []
