@@ -96,6 +96,15 @@ Signals.trap(signal: Signals.Signal.user(Int(SIGUSR1))) { _ in
     print("\(String(format: "%.3f", p.complete*100.0))% of run complete in \(String(format: "%.1f seconds", p.time))")
 }
 
+//for d in datasets {
+//    guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
+//        print("couldn't load file \(datasetLocation+d+".csv")")
+//        continue
+//    }
+//    data.saveAsARFF(file: datasetLocation+"generatedARFF/\(d).arff")
+//}
+//
+
 for d in datasets {
     guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
         print("couldn't load file \(datasetLocation+d+".csv")")
@@ -115,13 +124,21 @@ for d in datasets {
     for i in 0..<NUM_RUNS {
         let start = Date().timeIntervalSince1970
         let result = crossValidation(data: data, buildMethod: .DE, progress: progress)
-        fMeasure.append(average(a: result.map {$0.macroFMeasure()}))
+        var aggregateResult = Result()
+        aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
+        for r in 0..<result.count {
+            result[r].tree.saveToFile(filename: resultsLocation+d+"-Run\(i+1)-Tree\(r)")
+            result[r].saveToFile(filename: resultsLocation+d+"-Run\(i+1)-Result\(r)")
+            for i in 0..<data.classes.count {
+                for j in 0..<data.classes.count {
+                    aggregateResult.confusionMatrix[i][j] += result[r].confusionMatrix[i][j]
+                }
+            }
+        }
+        fMeasure.append(aggregateResult.macroFMeasureV2())
         treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
         deepestLeaf.append(average(a: result.map {Double($0.tree.deepestLeaf())}))
         resultStr += resultString(run: i, fMeasure: fMeasure.last!, treeSize: treeSize.last!, deepestLeaf: deepestLeaf.last!)
-        for r in 0..<result.count {
-            result[r].tree.saveToFile(filename: resultsLocation+d+"-Run\(i+1)-Tree\(r)")
-        }
         print("Run \(i+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", (Date().timeIntervalSince1970-start)))s)")
     }
     resultStr += resultString(run: nil, fMeasure: average(a: fMeasure), treeSize: average(a: treeSize), deepestLeaf: average(a: deepestLeaf))

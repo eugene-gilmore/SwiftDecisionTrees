@@ -9,9 +9,50 @@
 import JSONCodable
 import Foundation
 
-public struct Result {
-    public var confusionMatrix : [[Int]] = [] //[predicted][actual]
-    public var tree : TreeNode = TreeNode()
+public struct Result : JSONCodable {
+    public init(object: JSONObject) throws {
+        let decoder = JSONDecoder(object: object)
+        let tmp : [Int] = try decoder.decode("confusionMatrix")
+        let numClasses = Int(sqrt(Double(tmp.count)))
+        confusionMatrix = Array(repeating: Array(repeating: 0, count: numClasses), count: numClasses)
+        for i in 0..<numClasses {
+            for j in 0..<numClasses {
+                confusionMatrix[i][j] = tmp[i*numClasses+j]
+            }
+        }
+        tree = try decoder.decode("tree")
+    }
+    
+    public init() {
+        confusionMatrix = []
+        tree = TreeNode()
+    }
+    
+    public func saveToFile(filename : String) {
+        do {
+            try toJSONString().write(toFile: filename, atomically: false, encoding: .utf8)
+        } catch {
+            print("Error writing tree to file")
+        }
+    }
+    
+    public func toJSON() throws -> Any {
+        return try JSONEncoder.create { (encoder) -> Void in
+            try encoder.encode(tree, key: "tree")
+            try encoder.encode(confusionMatrix.reduce([], {$0 + $1}), key: "confusionMatrix")
+        }
+    }
+    
+    public init(filename : String) throws {
+        guard let json = String(contentsOfFile: filename, quiet: true) else {
+            self.init()
+            return
+        }
+        try self.init(JSONString: json)
+    }
+    
+    public var confusionMatrix : [[Int]] //[predicted][actual]
+    public var tree : TreeNode
     
     public func accuracy() -> Double {
         var numCorrect = 0
@@ -80,17 +121,10 @@ public struct Result {
                 fp += confusionMatrix[i][j]
                 fn += confusionMatrix[j][i]
             }
-            var precision = 1.0
-            var recall = 1.0
-            if(fp != 0) {
-                fp -= confusionMatrix[i][i]
-                precision = Double(confusionMatrix[i][i])/Double(fp + confusionMatrix[i][i])
-            }
-            if(fn != 0) {
-                fn -= confusionMatrix[i][i]
-                recall = Double(confusionMatrix[i][i])/Double(fn + confusionMatrix[i][i])
-            }
-            f1 += (2*precision*recall)/(precision+recall)
+            fp -= confusionMatrix[i][i]
+            fn -= confusionMatrix[i][i]
+            let tp = Double(confusionMatrix[i][i])
+            f1 += (2.0*tp)/(2*tp+Double(fp)+Double(fn))
         }
         f1 = f1/Double(confusionMatrix.count)
         return f1
@@ -356,6 +390,36 @@ public class DataSet {
                 s += "\(v != nil ? String(format: "%.2f", v!) : "?"),"
             }
             s += "\(i.classVal)\n"
+        }
+        do {
+            try s.write(toFile: file, atomically: false, encoding: .utf8)
+        }
+        catch {
+            print("Error writing file")
+        }
+    }
+    
+    public func saveAsARFF(file: String) {
+        var s = "@relation training\n\n"
+        for a in 0..<attributes.count {
+            if(attributes[a].name.isEmpty) {
+                s += "@attribute att\(a+1) numeric\n"
+            }
+            else {
+                s += "@attribute \(attributes[a].name) numeric\n"
+            }
+        }
+        s += "\n@attribute class {"
+        for c in classes {
+            s += "\(c.name),"
+        }
+        s.removeLast()
+        s += "}\n\n@data\n"
+        for i in instances {
+            for v in i.values {
+                s += "\(v != nil ? String(format: "%.2f", v!) : "?"),"
+            }
+            s += "\(classes[i.classIndex].name)\n"
         }
         do {
             try s.write(toFile: file, atomically: false, encoding: .utf8)
@@ -1181,6 +1245,16 @@ public func gain(firstIndex : Int, lastIndex: Int, numMissing : Int, data : Data
     return ((totalCount-distribution.missingCount)/totalCount)*(info(firstIndex : 0, lastIndex : data.instances.count-1-numMissing, insideRange: true, numMissing: numMissing, data: data, freqTable: freqTable) - infox)
 }
 
+public func TwoingCriteria(distribution : Distribution) -> Double {
+    var result = 0.0
+    for c in 0..<distribution.subsets.count {
+        result += abs(distribution.subsets[0][c] - distribution.subsets[1][c])
+    }
+    result = result * result
+    result *= (distribution.weightSubset(i: 0)*distribution.weightSubset(i: 1)/(distribution.totalWeight()*distribution.totalWeight()*4))
+    return result
+}
+
 public func gainRatio(distribution : Distribution) -> Double{
     var splitInfo = 0.0
     for s in 0..<distribution.subsets.count {
@@ -1422,8 +1496,8 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         progress?.reset(tasks: 100*50*dataset.numAttributes()*(dataset.numAttributes()-1))
         CalculateBestSingleSplits()
         var cp = self
-        for i in 0..<dataset.numAttributes() {
-            for j in (i+1)..<dataset.numAttributes() {
+        for i in 0..<(dataset.numAttributes()-1) {//dataset.numAttributes() {
+            for j in (i+1)...(i+1) {//<dataset.numAttributes() {
                 for k in [false,true] {
                 group.enter()
                 DispatchQueue.global(qos: .userInitiated).async {
