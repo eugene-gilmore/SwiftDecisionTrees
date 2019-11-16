@@ -1623,67 +1623,67 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
                 }
                 group.enter()
                 DispatchQueue.global(qos: .userInitiated).async { [i,j] in
-                var copy = cp
-                copy.currentAttributes = [i, j]
-                copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
+                    var copy = cp
+                    copy.currentAttributes = [i, j]
+                    copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
                 
                     var currentCandidate = copy.bestSingleSplits![copy.currentAttributes[0]]
                     if(currentCandidate.count == 0) {
                         currentCandidate = [Double.random(in: 0...1), Double.random(in: 0...1), Double.random(in: 0...1), Double.random(in: 0...1)]
                     }
                     else {
-                let x1 = Double.random(in: 0...1)
-                let x2 = Double.random(in: 0...1)
-                currentCandidate[0] = min(x1, x2)
-                currentCandidate[2] = max(x1, x2)
+                        let x1 = Double.random(in: 0...1)
+                        let x2 = Double.random(in: 0...1)
+                        currentCandidate[0] = min(x1, x2)
+                        currentCandidate[2] = max(x1, x2)
                     }
-                var currentCost = copy.EvaluateCost(parameters: currentCandidate)
-                let maxIterations = 300
-                let stepSize = 0.05
-                var movements : [(Index: Int, Direction: Double)] = []
-                for i in 0..<copy.NumberOfParameters() {
-                    for direction in [-1.0, 1.0] {
-                        movements.append((Index: i, Direction: direction))
-                    }
-                }
-                //CalculateIntersections()
-                
-                for _ in 0..<maxIterations {
-                    var bestNewCandidate : [Double]? = nil
-                    var bestNewCost = currentCost
-                    for i in 0..<movements.count {
-                        var newCandidate = currentCandidate
-                        newCandidate[movements[i].Index] += stepSize*movements[i].Direction
-                        let newCost = copy.EvaluateCost(parameters: newCandidate)
-                        if(newCost < bestNewCost) {
-                            bestNewCandidate = newCandidate
-                            bestNewCost = newCost
+                    var currentCost = copy.EvaluateCost(parameters: currentCandidate)
+                    let maxIterations = 300
+                    let stepSize = 0.05
+                    var movements : [(Index: Int, Direction: Double)] = []
+                    for i in 0..<copy.NumberOfParameters() {
+                        for direction in [-1.0, 1.0] {
+                            movements.append((Index: i, Direction: direction))
                         }
-                        if(bestNewCandidate != nil && copy.mode != .BestImprovement) {
-                            if(copy.mode == .RoundRobinImprovement) {
-                                for _ in (i+1)..<movements.count {
-                                    movements.append(movements.popLast()!)
-                                }
+                    }
+                    //CalculateIntersections()
+                
+                    for _ in 0..<maxIterations {
+                        var bestNewCandidate : [Double]? = nil
+                        var bestNewCost = currentCost
+                        for i in 0..<movements.count {
+                            var newCandidate = currentCandidate
+                            newCandidate[movements[i].Index] += stepSize*movements[i].Direction
+                            let newCost = copy.EvaluateCost(parameters: newCandidate)
+                            if(newCost < bestNewCost) {
+                                bestNewCandidate = newCandidate
+                                bestNewCost = newCost
                             }
+                            if(bestNewCandidate != nil && copy.mode != .BestImprovement) {
+                                if(copy.mode == .RoundRobinImprovement) {
+                                    for _ in (i+1)..<movements.count {
+                                        movements.append(movements.popLast()!)
+                                    }
+                                }
+                                break
+                            }
+                        }
+                        if(bestNewCandidate != nil) {
+                            currentCandidate = bestNewCandidate!
+                            currentCost = bestNewCost
+                        }
+                        else {
                             break
                         }
                     }
-                    if(bestNewCandidate != nil) {
-                        currentCandidate = bestNewCandidate!
-                        currentCost = bestNewCost
+                    sema.wait()
+                    if(currentCost < bestCost) {
+                        bestCost = currentCost
+                        bestAttIndex = [i,j]
+                        bestParameters = currentCandidate
                     }
-                    else {
-                        break
-                    }
-                }
-                sema.wait()
-                if(currentCost < bestCost) {
-                    bestCost = currentCost
-                    bestAttIndex = [i,j]
-                    bestParameters = currentCandidate
-                }
-                sema.signal()
-                group.leave()
+                    sema.signal()
+                    group.leave()
                 }
             }
         }
@@ -1716,83 +1716,93 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil) -> (rule: Rule
     if let att = attribute {
         range = att..<(att+1)
     }
+    let group = DispatchGroup()
+    let sema = DispatchSemaphore(value: 1)
 	for a in range {
-        var bestGain : Double? = nil
-        var bestI = 0, bestJ = 0
-		let numMissing = data.sortOnAttribute(attribute: a)
-        if(numMissing == data.instances.count) {
-            continue
-        }
-        let freqTable = computeFreqTable(data: data)
-		var minVal : Double = 0
-		var maxVal : Double = 0
-        let minSplit = min(max(2.0, 0.1*Double(data.instances.count-numMissing/data.classes.count)), 25.0)
-		var lastMin : Double? = nil
-		for i in 0..<(data.instances.count-1) {
-            if(data.instances[i].values[a] == nil) {
-                break
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async { [a] in
+            var bestGain : Double? = nil
+            var bestI = 0, bestJ = 0
+            let dataCopy = DataSet(dataset: data, copyInstances: true)
+            let numMissing = dataCopy.sortOnAttribute(attribute: a)
+            if(numMissing == dataCopy.instances.count) {
+                return
             }
-			minVal = data.instances[i].values[a]!
-			if(lastMin != nil && abs(minVal - lastMin!) < 0.0001) {
-				continue
-			}
-			lastMin = minVal
-			
-			for j in (i+1)..<data.instances.count {
-                if(data.instances[j].values[a] == nil) {
+            let freqTable = computeFreqTable(data: dataCopy)
+            var minVal : Double = 0
+            var maxVal : Double = 0
+            let minSplit = min(max(2.0, 0.1*Double(dataCopy.instances.count-numMissing/dataCopy.classes.count)), 25.0)
+            var lastMin : Double? = nil
+            for i in 0..<(dataCopy.instances.count-1) {
+                if(dataCopy.instances[i].values[a] == nil) {
+                    break
+                }
+                minVal = dataCopy.instances[i].values[a]!
+                if(lastMin != nil && abs(minVal - lastMin!) < 0.0001) {
                     continue
                 }
-                maxVal = data.instances[j].values[a]!
-                if(j < data.instances.count-1 && data.instances[j+1].values[a] != nil && data.instances[j+1].values[a]! - maxVal < 0.0001) {
-                    continue
-                }
-                let g = gain(firstIndex : i , lastIndex: j, numMissing: numMissing, data: data, freqTable: freqTable)
-                if(bestGain == nil || g > bestGain!) {
-                    bestI = i
-                    bestJ = j
-                    bestGain = g
-                    let distribution = splitDistribution(firstIndex: i, lastIndex: j, numMissing: numMissing, data: data, freqTable: freqTable)
-                    if(distribution.insideCount < minSplit || distribution.outsideCount < minSplit) {
-                        useableRule = false
+                lastMin = minVal
+                
+                for j in (i+1)..<dataCopy.instances.count {
+                    if(dataCopy.instances[j].values[a] == nil) {
+                        continue
                     }
-                    else {
-                        useableRule = true
+                    maxVal = dataCopy.instances[j].values[a]!
+                    if(j < dataCopy.instances.count-1 && dataCopy.instances[j+1].values[a] != nil && dataCopy.instances[j+1].values[a]! - maxVal < 0.0001) {
+                        continue
+                    }
+                    let g = gain(firstIndex : i , lastIndex: j, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
+                    if(bestGain == nil || g > bestGain!) {
+                        bestI = i
+                        bestJ = j
+                        bestGain = g
+                        let distribution = splitDistribution(firstIndex: i, lastIndex: j, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
+                        if(distribution.insideCount < minSplit || distribution.outsideCount < minSplit) {
+                            useableRule = false
+                        }
+                        else {
+                            useableRule = true
+                        }
                     }
                 }
-			}
-		}
-        var gr : Double? = nil
-        if(bestGain != nil && useableRule) {
-            gr = gainRatio(firstIndex: bestI, lastIndex: bestJ, numMissing: numMissing, data: data, freqTable: freqTable)
-        }
-        if(gr != nil && (bestGainRatio == nil || gr! > bestGainRatio!)) {
-            bestGainRatio = gr
-            bestAttribute = a
-            minVal = data.instances[bestI].values[a]!
-            maxVal = data.instances[bestJ].values[a]!
-            //put the split points half way between the next value above/bellow
-            if(bestI != 0) {
-                minVal = minVal - (minVal-data.instances[bestI-1].values[a]!)/2
             }
-            if(bestJ < data.instances.count - 1 && data.instances[bestJ+1].values[a] != nil) {
-                maxVal = maxVal + (data.instances[bestJ+1].values[a]!-maxVal)/2
+            var gr : Double? = nil
+            if(bestGain != nil && useableRule) {
+                gr = gainRatio(firstIndex: bestI, lastIndex: bestJ, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
             }
-            
-            //if the min or max is the datasets min or max just split on one value
-            if(minVal > data.instances[0].values[a]!) {
-                bestMin = minVal
+            sema.wait()
+            if(gr != nil && (bestGainRatio == nil || gr! > bestGainRatio!)) {
+                bestGainRatio = gr
+                bestAttribute = a
+                minVal = dataCopy.instances[bestI].values[a]!
+                maxVal = dataCopy.instances[bestJ].values[a]!
+                //put the split points half way between the next value above/bellow
+                if(bestI != 0) {
+                    minVal = minVal - (minVal-dataCopy.instances[bestI-1].values[a]!)/2
+                }
+                if(bestJ < dataCopy.instances.count - 1 && dataCopy.instances[bestJ+1].values[a] != nil) {
+                    maxVal = maxVal + (dataCopy.instances[bestJ+1].values[a]!-maxVal)/2
+                }
+                
+                //if the min or max is the datasets min or max just split on one value
+                if(minVal > dataCopy.instances[0].values[a]!) {
+                    bestMin = minVal
+                }
+                else {
+                    bestMin = nil
+                }
+                if(maxVal < dataCopy.instances[dataCopy.instances.count-1-numMissing].values[a]!) {
+                    bestMax = maxVal
+                }
+                else {
+                    bestMax = nil
+                }
             }
-            else {
-                bestMin = nil
-            }
-            if(maxVal < data.instances[data.instances.count-1-numMissing].values[a]!) {
-                bestMax = maxVal
-            }
-            else {
-                bestMax = nil
-            }
+            sema.signal()
+            group.leave()
         }
 	}
+    group.wait()
     
 	if(bestGainRatio == nil || bestGainRatio! < 0.0001) {
         return (rule: nil, gainRatio: 0.0)

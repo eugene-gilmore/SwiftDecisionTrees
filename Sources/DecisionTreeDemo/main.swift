@@ -155,6 +155,19 @@ func debug() {
     
 }
 
+func printDatasetStatsLatex() {
+    print("Dataset & Attributes & Instances & Classes \\\\")
+    for d in datasets {
+        guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
+            print("couldn't load file \(datasetLocation+d+".csv")")
+            continue
+        }
+        print("\(d) & \(data.attributes.count) & \(data.instances.count) & \(data.classes.count)\\\\")
+    }
+}
+
+//printDatasetStatsLatex()
+
 //debug()
 
 //processWeka(directory: resultsLocation+"../j48/")
