@@ -70,7 +70,7 @@ func generateMostlyRandom(numAttributes: Int, numNonRandom: Int, numInstances: I
 }
 
 let datasetLocation = "/Users/eugene/PHD/Datasets/"
-let resultsLocation = datasetLocation+"results/c45/"
+let resultsLocation = datasetLocation+"results/de/"
 
 //generateMostlyRandom(numAttributes: 1000, numNonRandom: 5, numInstances: 200).saveAsCSV(file: datasetLocation+"generated1.csv")
 

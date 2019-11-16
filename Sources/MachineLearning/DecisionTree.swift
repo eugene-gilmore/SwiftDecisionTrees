@@ -1503,6 +1503,9 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         var cp = self
         for i in 0..<(dataset.numAttributes()-1) {//dataset.numAttributes() {
             for j in (i+1)...(i+1) {//<dataset.numAttributes() {
+                if(dataset.attributes[i].min == nil || dataset.attributes[j].min == nil) { //attriubte value is missing for all instances
+                    continue
+                }
                 for k in [false,true] {
                 group.enter()
                 DispatchQueue.global(qos: .userInitiated).async { [i,j,k] in
@@ -1615,6 +1618,9 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
         var cp = self
         for i in 0..<dataset.numAttributes() {
             for j in (i+1)..<dataset.numAttributes() {
+                if(dataset.attributes[i].min == nil || dataset.attributes[j].min == nil) { //attriubte value is missing for all instances
+                    continue
+                }
                 group.enter()
                 DispatchQueue.global(qos: .userInitiated).async { [i,j] in
                 var copy = cp
