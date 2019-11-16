@@ -105,6 +105,60 @@ Signals.trap(signal: Signals.Signal.user(Int(SIGUSR1))) { _ in
 //}
 //
 
+func processWeka(directory: String) {
+    for d in datasets {
+        print(d)
+        for r in 0..<NUM_RUNS {
+            if let result = try? Result(filename: directory+d+"-Run\(r+1)-Result") {
+                print("Run \(r+1) \(result.macroFMeasureV2())")
+            }
+            else {
+                print("Error reading file " + directory+d+"-Run\(r+1)-Result")
+            }
+        }
+    }
+}
+
+func debug() {
+    func average(a : [Double]) -> Double {
+        return a.reduce(0.0, {$0 + $1})/Double(a.count)
+    }
+    func resultString(run: Int?, fMeasure: Double, treeSize: Double, deepestLeaf: Double) -> String {
+        return "\(run != nil ? "Run \(run!+1)" : "Average")\t\(String(format: "%.2f",fMeasure))\t\t\(String(format: "%.2f",treeSize))\t\t\(String(format: "%.2f",deepestLeaf))\n"
+    }
+    let start = Date().timeIntervalSince1970
+    var result : [Result] = []
+    var aggregateResult = Result()
+    aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: 2), count: 2)
+    var fMeasure : [Double] = []
+    var treeSize : [Double] = []
+    var deepestLeaf : [Double] = []
+    var resultStr = ""
+    for k in 0..<10 {
+        if let r = try? Result(filename: resultsLocation+"../breast-cancer-wisconsin-Run1-Result\(k)") {
+            result.append(r)
+            for i in 0..<2 {
+                for j in 0..<2 {
+                    aggregateResult.confusionMatrix[i][j] += result[k].confusionMatrix[i][j]
+                }
+            }
+        }
+        else {
+            print("Error reading file")
+        }
+    }
+    fMeasure.append(aggregateResult.macroFMeasureV2())
+    treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
+    deepestLeaf.append(average(a: result.map {Double($0.tree.deepestLeaf())}))
+    resultStr += resultString(run: 0, fMeasure: fMeasure.last!, treeSize: treeSize.last!, deepestLeaf: deepestLeaf.last!)
+    print("Run \(0+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", (Date().timeIntervalSince1970-start)))s)")
+    
+}
+
+//debug()
+
+//processWeka(directory: resultsLocation+"../j48/")
+
 for d in datasets {
     guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
         print("couldn't load file \(datasetLocation+d+".csv")")
@@ -123,7 +177,7 @@ for d in datasets {
     }
     for i in 0..<NUM_RUNS {
         let start = Date().timeIntervalSince1970
-        let result = crossValidation(data: data, buildMethod: .DE, progress: progress)
+        let result = crossValidation(data: data, buildMethod: .DE, progress: progress, runParallel: true)
         var aggregateResult = Result()
         aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
         for r in 0..<result.count {

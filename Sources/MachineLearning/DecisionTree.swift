@@ -20,7 +20,12 @@ public struct Result : JSONCodable {
                 confusionMatrix[i][j] = tmp[i*numClasses+j]
             }
         }
-        tree = try decoder.decode("tree")
+        if let t : TreeNode = try? decoder.decode("tree") {
+            tree = t
+        }
+        else {
+            tree = TreeNode()
+        }
     }
     
     public init() {
@@ -1500,7 +1505,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
             for j in (i+1)...(i+1) {//<dataset.numAttributes() {
                 for k in [false,true] {
                 group.enter()
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: .userInitiated).async { [i,j,k] in
                     var copy = cp
                     copy.currentAttributes = [i, k ? -j : j]
                     copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
@@ -1611,7 +1616,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
         for i in 0..<dataset.numAttributes() {
             for j in (i+1)..<dataset.numAttributes() {
                 group.enter()
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: .userInitiated).async { [i,j] in
                 var copy = cp
                 copy.currentAttributes = [i, j]
                 copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
@@ -2050,7 +2055,7 @@ public class CrossValidationProgress {
     private var startTime : Double
 }
 
-public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : BuildMethod, progress : CrossValidationProgress? = nil) -> [Result] {
+public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : BuildMethod, progress : CrossValidationProgress? = nil, runParallel: Bool = false) -> [Result] {
     
     if let p = progress {
         p.reset(folds: folds)
@@ -2080,31 +2085,45 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
     
     
     var result = Array(repeating: Result(), count: folds)
+    let group = DispatchGroup()
     for  i in 0..<folds {
-        result[i].tree = TreeNode()
-        let d = DataSet(dataset: data, copyInstances : false)
-        for j in 0..<folds {
-            if(j == i) {
-                continue
+        func runFold(fold : Int) {
+            result[fold].tree = TreeNode()
+            let d = DataSet(dataset: data, copyInstances : false)
+            for j in 0..<folds {
+                if(j == fold) {
+                    continue
+                }
+                for instance in foldSets[j].instances {
+                    d.addPoint(point: instance)
+                }
             }
-            for instance in foldSets[j].instances {
-                d.addPoint(point: instance)
-            }
-        }
-        finishSubTree(node: result[i].tree, data: d, fullTrainingSet: d, buildMethod: buildMethod, progress: progress?.foldProgress)
-        pruneNode(node: result[i].tree, data: d)
+            finishSubTree(node: result[fold].tree, data: d, fullTrainingSet: d, buildMethod: buildMethod, progress: progress?.foldProgress)
+            pruneNode(node: result[fold].tree, data: d)
         
         
-        result[i].confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
-        for p in foldSets[i].instances {
-            let real = data.getClassIndex(value: p.classVal)
-            let predict = data.getClassIndex(value: classifyPoint(point: p, dataset: data, classifier: result[i].tree))
-            if let r = real, let p = predict {
-                result[i].confusionMatrix[p][r] += 1
+            result[fold].confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
+            for p in foldSets[fold].instances {
+                let real = data.getClassIndex(value: p.classVal)
+                let predict = data.getClassIndex(value: classifyPoint(point: p, dataset: data, classifier: result[fold].tree))
+                if let r = real, let p = predict {
+                    result[fold].confusionMatrix[p][r] += 1
+                }
+            }
+            progress?.completedFolds += 1
+        }
+        if(runParallel) {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async { [i] in
+                runFold(fold: i)
+                group.leave()
             }
         }
-        progress?.completedFolds += 1
+        else {
+            runFold(fold: i)
+        }
     }
+    group.wait()
     
     return result
 }
