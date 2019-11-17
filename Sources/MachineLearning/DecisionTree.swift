@@ -1726,6 +1726,7 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
             let dataCopy = DataSet(dataset: data, copyInstances: true)
             let numMissing = dataCopy.sortOnAttribute(attribute: a)
             if(numMissing == dataCopy.instances.count) {
+                group.leave()
                 return
             }
             let freqTable = computeFreqTable(data: dataCopy)
