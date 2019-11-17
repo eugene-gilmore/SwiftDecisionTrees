@@ -1707,7 +1707,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
     public var mode : Mode
 }
 
-public func findBestSplit(data : DataSet, attribute : Int? = nil) -> (rule: Rule?, gainRatio: Double) {
+public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = false) -> (rule: Rule?, gainRatio: Double) {
 	var bestGainRatio : Double? = nil
 	var bestAttribute : Int = 0
 	var bestMin : Double? = 0, bestMax : Double? = 0
@@ -1733,7 +1733,11 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil) -> (rule: Rule
             var maxVal : Double = 0
             let minSplit = min(max(2.0, 0.1*Double(dataCopy.instances.count-numMissing/dataCopy.classes.count)), 25.0)
             var lastMin : Double? = nil
-            for i in 0..<(dataCopy.instances.count-1) {
+            var iRange = 0...0
+            if(twoValueSplit) {
+                iRange = 0...(dataCopy.instances.count-2)
+            }
+            for i in iRange{
                 if(dataCopy.instances[i].values[a] == nil) {
                     break
                 }
