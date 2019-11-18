@@ -1716,18 +1716,19 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
     if let att = attribute {
         range = att..<(att+1)
     }
-    let group = DispatchGroup()
-    let sema = DispatchSemaphore(value: 1)
+    //let group = DispatchGroup()
+    //let sema = DispatchSemaphore(value: 1)
 	for a in range {
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async { [a] in
+        //group.enter()
+        //DispatchQueue.global(qos: .userInitiated).async { [a] in
             var bestGain : Double? = nil
             var bestI = 0, bestJ = 0
             let dataCopy = DataSet(dataset: data, copyInstances: true)
             let numMissing = dataCopy.sortOnAttribute(attribute: a)
             if(numMissing == dataCopy.instances.count) {
-                group.leave()
-                return
+                //group.leave()
+                //return
+                break
             }
             let freqTable = computeFreqTable(data: dataCopy)
             var minVal : Double = 0
@@ -1775,7 +1776,7 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
             if(bestGain != nil && useableRule) {
                 gr = gainRatio(firstIndex: bestI, lastIndex: bestJ, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
             }
-            sema.wait()
+            //sema.wait()
             if(gr != nil && (bestGainRatio == nil || gr! > bestGainRatio!)) {
                 bestGainRatio = gr
                 bestAttribute = a
@@ -1803,11 +1804,11 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
                     bestMax = nil
                 }
             }
-            sema.signal()
-            group.leave()
-        }
+            //sema.signal()
+            //group.leave()
+        //}
 	}
-    group.wait()
+    //group.wait()
     
 	if(bestGainRatio == nil || bestGainRatio! < 0.0001) {
         return (rule: nil, gainRatio: 0.0)
