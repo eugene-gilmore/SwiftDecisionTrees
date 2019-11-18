@@ -108,14 +108,17 @@ Signals.trap(signal: Signals.Signal.user(Int(SIGUSR1))) { _ in
 func processWeka(directory: String) {
     for d in datasets {
         print(d)
+        var avg = 0.0
         for r in 0..<NUM_RUNS {
             if let result = try? Result(filename: directory+d+"-Run\(r+1)-Result") {
-                print("Run \(r+1) \(result.macroFMeasureV2())")
+                //print("Run \(r+1) \(result.macroFMeasureV2())")
+                avg += result.macroFMeasureV2()
             }
             else {
                 print("Error reading file " + directory+d+"-Run\(r+1)-Result")
             }
         }
+        print(String(format: "%.2f", avg/Double(NUM_RUNS)))
     }
 }
 
@@ -171,6 +174,19 @@ func printDatasetStatsLatex() {
 //debug()
 
 //processWeka(directory: resultsLocation+"../j48/")
+
+func evaluateSize() {
+    for d in datasets {
+        guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
+            print("couldn't load file \(datasetLocation+d+".csv")")
+            continue
+        }
+        let tree = TreeNode()
+        finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: .C45)
+        print("\(d) \(tree.sizeOfTree()) \(tree.deepestLeaf())")
+    }
+}
+//exit(0)
 
 for d in datasets {
     guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
