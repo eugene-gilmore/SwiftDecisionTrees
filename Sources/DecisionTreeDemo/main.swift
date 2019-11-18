@@ -181,12 +181,20 @@ func evaluateSize() {
             print("couldn't load file \(datasetLocation+d+".csv")")
             continue
         }
-        let tree = TreeNode()
-        finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: .C45)
-        print("\(d) \(tree.sizeOfTree()) \(tree.deepestLeaf())")
+        var size = 0.0
+        var deepestLeaft = 0.0
+        for _ in 0..<NUM_RUNS {
+            let tree = TreeNode()
+            finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: .DE)
+            size += Double(tree.sizeOfTree())
+            deepestLeaft += Double(tree.deepestLeaf())
+        }
+        print("\(d) \(deepestLeaft/Double(NUM_RUNS))\\\(size/Double(NUM_RUNS))")
     }
 }
-//exit(0)
+
+evaluateSize()
+exit(0)
 
 for d in datasets {
     guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
