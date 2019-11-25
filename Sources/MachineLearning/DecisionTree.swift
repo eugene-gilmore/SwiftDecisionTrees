@@ -435,6 +435,32 @@ public class DataSet {
         }
     }
     
+    public func averages() -> [Double] {
+        var averages : [Double] = []
+        for d in 0..<attributes.count {
+            var sum : Double = 0.0
+            var count = 0
+            for i in instances {
+                if let v = i.values[d] {
+                    sum += v
+                    count += 1
+                }
+            }
+            averages.append(sum/Double(count))
+        }
+        return averages
+    }
+    
+    public func fillMissingWith(values : [Double]) {
+        for i in instances {
+            for a in 0..<i.values.count {
+                if(i.values[a] == nil) {
+                    i.values[a] = values[a]
+                }
+            }
+        }
+    }
+    
     public var description : String {get{return instances.description}}
 }
 
@@ -2013,19 +2039,8 @@ public enum BuildMethod {
 }
 
 public func buildOC1(data: DataSet) -> TreeNode {
-    var averages : [Float] = []
-    for d in 0..<data.attributes.count {
-        var sum : Float = 0.0
-        var count = 0
-        for i in data.instances {
-            if let v = i.values[d] {
-                sum += Float(v)
-                count += 1
-            }
-        }
-        averages.append(sum/Float(count))
-    }
-    var values = data.instances.map {[0.0] + $0.values.enumerated().map {$1 != nil ? Float($1!) : averages[$0]}}
+    data.fillMissingWith(values: data.averages())
+    var values = data.instances.map {[0.0] + $0.values.map {Float($0!)}}
     var points : [POINT] = []
     for i in 0..<data.instances.count {
         points.append(POINT(dimension: &values[i][0], category: Int32(data.instances[i].classIndex+1), val: 0))
@@ -2220,6 +2235,9 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
         
         
             result[fold].confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
+            if(buildMethod == .OC1) {
+                foldSets[fold].fillMissingWith(values: d.averages())
+            }
             for p in foldSets[fold].instances {
                 let real = data.getClassIndex(value: p.classVal)
                 let predict = data.getClassIndex(value: classifyPoint(point: p, dataset: data, classifier: result[fold].tree))
