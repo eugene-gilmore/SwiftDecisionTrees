@@ -8,6 +8,7 @@
 
 import JSONCodable
 import Foundation
+import OC1
 
 public struct Result : JSONCodable {
     public init(object: JSONObject) throws {
@@ -526,6 +527,20 @@ public class AxisSelectionRule : JSONCodable {
 	}
 }
 
+public class HyperPlaneRule : JSONCodable {
+    public required init(object: JSONObject) throws {
+        let decoder = JSONDecoder(object: object)
+        coefficients = try decoder.decode("coefficients")
+    }
+    
+    public init(coefficients : [Double]) {
+        self.coefficients = coefficients
+    }
+    
+    public var coefficients : [Double]
+    
+}
+
 public typealias PathToNode = [(rule : Rule, invert : Bool)]
 
 public protocol Shape : JSONCodable {
@@ -658,6 +673,7 @@ public enum Rule {
 	case AxisSelection([AxisSelectionRule])
 	case Region([RegionRule])
 	case PCRegion([PCRegionRule])
+    case HyperPlane(HyperPlaneRule)
 }
 
 public class TreeNode : JSONCodable {
@@ -787,6 +803,8 @@ public class TreeNode : JSONCodable {
 					try encoder.encode(region, key: "rules")
 				case let .Region(region):
 					try encoder.encode(region, key: "rules")
+                case let .HyperPlane(hyperplane):
+                    try encoder.encode(hyperplane, key: "rules")
 				}
 			}
 			else {
@@ -840,6 +858,12 @@ public func insideRule(instance : Point, data : DataSet, rule : Rule) -> Bool? {
 				return false
 			}
 		}
+    case let .HyperPlane(hyperplane):
+        var value = hyperplane.coefficients[data.numAttributes()]
+        for i in 0..<data.numAttributes() {
+            value += hyperplane.coefficients[i]*instance.values[i]!
+        }
+        return value < 0
 	}
 	return true
 }
@@ -1707,7 +1731,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
     public var mode : Mode
 }
 
-public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = false) -> (rule: Rule?, gainRatio: Double) {
+public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = true) -> (rule: Rule?, gainRatio: Double) {
 	var bestGainRatio : Double? = nil
 	var bestAttribute : Int = 0
 	var bestMin : Double? = 0, bestMax : Double? = 0
@@ -1985,6 +2009,69 @@ public enum BuildMethod {
     case HCF
     case HCB
     case HCR
+    case OC1
+}
+
+public func buildOC1(data: DataSet) -> TreeNode {
+    var averages : [Float] = []
+    for d in 0..<data.attributes.count {
+        var sum : Float = 0.0
+        var count = 0
+        for i in data.instances {
+            if let v = i.values[d] {
+                sum += Float(v)
+                count += 1
+            }
+        }
+        averages.append(sum/Float(count))
+    }
+    var values = data.instances.map {[0.0] + $0.values.enumerated().map {$1 != nil ? Float($1!) : averages[$0]}}
+    var points : [POINT] = []
+    for i in 0..<data.instances.count {
+        points.append(POINT(dimension: &values[i][0], category: Int32(data.instances[i].classIndex+1), val: 0))
+    }
+    setDatasetParams(Int32(data.attributes.count), Int32(data.classes.count))
+    allocate_structures(Int32(data.instances.count))
+    var pp : [UnsafeMutablePointer<point>?]? = []
+    pp!.append(UnsafeMutablePointer<point>?.none)
+    for i in 0..<points.count {
+        pp!.append(&points[i])
+    }
+    let ptr = UnsafeMutablePointer(mutating: pp)
+    var file = "/tmp/tree"
+    var filePtr = strdup(file)
+    let tree = build_tree(ptr, Int32(data.instances.count), filePtr)
+    free(filePtr)
+    func CTreeToTree(tree : UnsafeMutablePointer<tree_node>?) -> TreeNode {
+        let node = TreeNode()
+        if let c = tree?.pointee.coefficients {
+            var coefficients : [Double] = []
+            for i in 0..<(data.numAttributes()+1) {
+                coefficients.append(Double(c[i+1]))
+            }
+            node.rules = .HyperPlane(HyperPlaneRule(coefficients: coefficients))
+            if(tree?.pointee.left != nil) {
+                node.insideChildRule = CTreeToTree(tree: tree?.pointee.left)
+            }
+            else {
+                node.insideChildRule = TreeNode()
+                node.insideChildRule?.classVal = data.classes[Int(tree!.pointee.left_cat)-1].value
+                
+            }
+            if(tree?.pointee.right != nil) {
+                node.outsideChildRule = CTreeToTree(tree: tree?.pointee.right)
+            }
+            else {
+                node.outsideChildRule = TreeNode()
+                node.outsideChildRule?.classVal = data.classes[Int(tree!.pointee.right_cat)-1].value
+            }
+            node.insideChildRule!.parent = node
+            node.outsideChildRule!.parent = node
+        }
+        return node
+    }
+    let root = CTreeToTree(tree: tree)
+    return root
 }
 
 public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: DataSet, buildMethod : BuildMethod, progress: Progress? = nil) {
@@ -2015,6 +2102,14 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
             case .HCR:
                 var hc = HillClimberSplit(dataset: data, mode: .RoundRobinImprovement)
                 node.rules = hc.getRule()
+            case .OC1:
+                let OC1Node = buildOC1(data: data)
+                node.rules = OC1Node.rules
+                node.insideChildRule = OC1Node.insideChildRule
+                node.outsideChildRule = OC1Node.outsideChildRule
+                node.classVal = OC1Node.classVal
+                node.creationTime = OC1Node.creationTime
+                return
             }
             if(node.rules == nil) {
                 stop = true

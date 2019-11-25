@@ -70,11 +70,11 @@ func generateMostlyRandom(numAttributes: Int, numNonRandom: Int, numInstances: I
 }
 
 let datasetLocation = "/Users/eugene/PHD/Datasets/"
-let resultsLocation = datasetLocation+"results/de/"
+let resultsLocation = datasetLocation+"results/oc1/"
 
 //generateMostlyRandom(numAttributes: 1000, numNonRandom: 5, numInstances: 200).saveAsCSV(file: datasetLocation+"generated1.csv")
 
-let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere"]
+let datasets = ["iris", "liver"/*, "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere"*/]
 let NUM_RUNS = 5
 
 func printDatasetStats(datasets : [String]) {
@@ -185,7 +185,7 @@ func evaluateSize() {
         var deepestLeaft = 0.0
         for _ in 0..<NUM_RUNS {
             let tree = TreeNode()
-            finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: .DE)
+            finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: .OC1)
             size += Double(tree.sizeOfTree())
             deepestLeaft += Double(tree.deepestLeaf())
         }
@@ -193,8 +193,8 @@ func evaluateSize() {
     }
 }
 
-evaluateSize()
-exit(0)
+//evaluateSize()
+//exit(0)
 
 for d in datasets {
     guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
@@ -214,7 +214,7 @@ for d in datasets {
     }
     for i in 0..<NUM_RUNS {
         let start = Date().timeIntervalSince1970
-        let result = crossValidation(data: data, buildMethod: .DE, progress: progress, runParallel: true)
+        let result = crossValidation(data: data, buildMethod: .OC1, progress: progress, runParallel: false)
         var aggregateResult = Result()
         aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
         for r in 0..<result.count {
