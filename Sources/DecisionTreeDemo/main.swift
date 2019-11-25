@@ -203,11 +203,12 @@ for d in datasets {
     }
     print("loaded: \(datasetLocation+d+".csv")")
     var fMeasure : [Double] = []
+    var accuracy: [Double] = []
     var treeSize : [Double] = []
     var deepestLeaf : [Double] = []
     var resultStr = "\tFMeasure\tTreeSize\tDeepestLeaf\n"
-    func resultString(run: Int?, fMeasure: Double, treeSize: Double, deepestLeaf: Double) -> String {
-        return "\(run != nil ? "Run \(run!+1)" : "Average")\t\(String(format: "%.2f",fMeasure))\t\t\(String(format: "%.2f",treeSize))\t\t\(String(format: "%.2f",deepestLeaf))\n"
+    func resultString(run: Int?, fMeasure: Double, accuracy: Double, treeSize: Double, deepestLeaf: Double) -> String {
+        return "\(run != nil ? "Run \(run!+1)" : "Average")\t\(String(format: "%.2f",fMeasure))\t\t\(String(format: "%.2f", accuracy))\t\t\(String(format: "%.2f",treeSize))\t\t\(String(format: "%.2f",deepestLeaf))\n"
     }
     func average(a : [Double]) -> Double {
         return a.reduce(0.0, {$0 + $1})/Double(a.count)
@@ -227,12 +228,13 @@ for d in datasets {
             }
         }
         fMeasure.append(aggregateResult.macroFMeasureV2())
+        accuracy.append(aggregateResult.accuracy())
         treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
         deepestLeaf.append(average(a: result.map {Double($0.tree.deepestLeaf())}))
-        resultStr += resultString(run: i, fMeasure: fMeasure.last!, treeSize: treeSize.last!, deepestLeaf: deepestLeaf.last!)
+        resultStr += resultString(run: i, fMeasure: fMeasure.last!, accuracy: accuracy.last!, treeSize: treeSize.last!, deepestLeaf: deepestLeaf.last!)
         print("Run \(i+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", (Date().timeIntervalSince1970-start)))s)")
     }
-    resultStr += resultString(run: nil, fMeasure: average(a: fMeasure), treeSize: average(a: treeSize), deepestLeaf: average(a: deepestLeaf))
+    resultStr += resultString(run: nil, fMeasure: average(a: fMeasure), accuracy: average(a: accuracy), treeSize: average(a: treeSize), deepestLeaf: average(a: deepestLeaf))
     do {
         try resultStr.write(toFile: resultsLocation+d+"-results.txt", atomically: false, encoding: .utf8)
     }
