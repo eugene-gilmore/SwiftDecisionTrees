@@ -132,8 +132,9 @@ struct tree_node *error_complexity_prune(root)
 	       tree_array[tree_index].cresult.leaf_count);
       
       tree_index ++;
-      tree_array[tree_index].root = cut_weakest_links(tree_array[tree_index-1].root);
-      if (tree_array[tree_index].root == NULL) break;
+      struct tree_node *pNewNode = cut_weakest_links(tree_array[tree_index-1].root);
+      if (pNewNode == NULL) break;
+      tree_array[tree_index].root = pNewNode;
       tree_array[tree_index].cresult = 
 	estimate_accuracy(ptest_points,no_of_ptest_points,
 			  tree_array[tree_index].root);
