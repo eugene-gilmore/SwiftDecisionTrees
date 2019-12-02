@@ -1757,21 +1757,23 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
     public var mode : Mode
 }
 
-public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = true) -> (rule: Rule?, gainRatio: Double) {
-	var bestGainRatio : Double? = nil
-	var bestAttribute : Int = 0
-	var bestMin : Double? = 0, bestMax : Double? = 0
-    var useableRule = true
+public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = false) -> (rule: Rule?, gainRatio: Double) {
     var range = 0..<data.attributes.count
     if let att = attribute {
         range = att..<(att+1)
     }
+    var bestGainRatio : [Double?] = Array(repeating: nil, count: range.count)
+    var bestGain : [Double?] = Array(repeating: nil, count: range.count)
+	var bestAttribute : Int = 0
+	var bestMin : [Double?] = Array(repeating: nil, count: range.count), bestMax : [Double?] = Array(repeating: nil, count: range.count)
+    var validModels = 0
+    var averageGain = 0.0
     //let group = DispatchGroup()
     //let sema = DispatchSemaphore(value: 1)
+    var index = 0
 	for a in range {
         //group.enter()
         //DispatchQueue.global(qos: .userInitiated).async { [a] in
-            var bestGain : Double? = nil
             var bestI = 0, bestJ = 0
             let dataCopy = DataSet(dataset: data, copyInstances: true)
             let numMissing = dataCopy.sortOnAttribute(attribute: a)
@@ -1783,7 +1785,7 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
             let freqTable = computeFreqTable(data: dataCopy)
             var minVal : Double = 0
             var maxVal : Double = 0
-            let minSplit = min(max(2.0, 0.1*Double(dataCopy.instances.count-numMissing/dataCopy.classes.count)), 25.0)
+            let minSplit = min(max(2.0, 0.1*Double(Double(dataCopy.instances.count-numMissing)/Double(dataCopy.classes.count))), 25.0)
             var lastMin : Double? = nil
             var iRange = 0...0
             if(twoValueSplit) {
@@ -1808,28 +1810,25 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
                         continue
                     }
                     let g = gain(firstIndex : i , lastIndex: j, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
-                    if(bestGain == nil || g > bestGain!) {
-                        bestI = i
-                        bestJ = j
-                        bestGain = g
+                    if(bestGain[index] == nil || g > bestGain[index]!) {
                         let distribution = splitDistribution(firstIndex: i, lastIndex: j, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
-                        if(distribution.insideCount < minSplit || distribution.outsideCount < minSplit) {
-                            useableRule = false
-                        }
-                        else {
-                            useableRule = true
+                        if(distribution.insideCount >= minSplit && distribution.outsideCount >= minSplit) {
+                            bestI = i
+                            bestJ = j
+                            bestGain[index] = g
                         }
                     }
                 }
             }
             var gr : Double? = nil
-            if(bestGain != nil && useableRule) {
+            if(bestGain[index] != nil) {
                 gr = gainRatio(firstIndex: bestI, lastIndex: bestJ, numMissing: numMissing, data: dataCopy, freqTable: freqTable)
+                validModels += 1
+                averageGain += bestGain[index]!
             }
             //sema.wait()
-            if(gr != nil && (bestGainRatio == nil || gr! > bestGainRatio!)) {
-                bestGainRatio = gr
-                bestAttribute = a
+            if(gr != nil) {
+                bestGainRatio[index] = gr
                 minVal = dataCopy.instances[bestI].values[a]!
                 maxVal = dataCopy.instances[bestJ].values[a]!
                 //put the split points half way between the next value above/bellow
@@ -1842,29 +1841,45 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
                 
                 //if the min or max is the datasets min or max just split on one value
                 if(minVal > dataCopy.instances[0].values[a]!) {
-                    bestMin = minVal
+                    bestMin[index] = minVal
                 }
                 else {
-                    bestMin = nil
+                    bestMin[index] = nil
                 }
                 if(maxVal < dataCopy.instances[dataCopy.instances.count-1-numMissing].values[a]!) {
-                    bestMax = maxVal
+                    bestMax[index] = maxVal
                 }
                 else {
-                    bestMax = nil
+                    bestMax[index] = nil
                 }
             }
             //sema.signal()
             //group.leave()
         //}
+        index += 1
 	}
     //group.wait()
     
-	if(bestGainRatio == nil || bestGainRatio! < 0.0001) {
+	if(validModels == 0) {
         return (rule: nil, gainRatio: 0.0)
 	}
+    averageGain /= Double(validModels)
+    
+    index = 0
+    var bestModelGr = 0.0
+    var bestIndex = 0
+    for a in range {
+        if let g = bestGainRatio[index], bestGain[index]! >= (averageGain-0.001) && g > bestModelGr {
+            bestModelGr = g
+            bestIndex = index
+            bestAttribute = a
+        }
+        index += 1
+    }
+    
+    
     //print("Gain Ratio \(bestGainRatio!)")
-    return (rule: Rule.AxisSelection([AxisSelectionRule(rangeMin : bestMin, rangeMax : bestMax, axisIndex : bestAttribute)]), gainRatio: bestGainRatio!)
+    return (rule: Rule.AxisSelection([AxisSelectionRule(rangeMin : bestMin[bestIndex], rangeMax : bestMax[bestIndex], axisIndex : bestAttribute)]), gainRatio: bestModelGr)
 }
 
 public func rulesForNode(n : TreeNode) -> PathToNode {
@@ -1879,6 +1894,25 @@ public func rulesForNode(n : TreeNode) -> PathToNode {
 	}
 }
 
+func errorFromLargestBranch(node : TreeNode, data : DataSet) -> (error: Double, branch: TreeNode) {
+    let inside = insideRules(data: data, rules: rulesForNode(n: node.insideChildRule!))
+    let largestBranch = inside.instances.count >= (data.instances.count - inside.instances.count) ? node.insideChildRule! : node.outsideChildRule!
+    func branchError(n : TreeNode, data : DataSet) -> Double {
+        if(n.isLeaf()) {
+            let leafClasses : (classVal : Int, distribution : [Int:Double]) = mostFreq(data: data)
+            let leafError = errorEstimate(e: data.sumOfWeights()-leafClasses.distribution[leafClasses.classVal]!, N: data.sumOfWeights())
+            return leafError
+        }
+        let insideData = insideRules(data: data, rules: rulesForNode(n: n.insideChildRule!))
+        let outsideData = insideRules(data: data, rules: rulesForNode(n: n.outsideChildRule!))
+        return branchError(n: n.insideChildRule!, data: insideData) + branchError(n: n.outsideChildRule!, data: outsideData)
+    }
+    largestBranch.parent = nil
+    let error = branchError(n: largestBranch, data: data)
+    largestBranch.parent = node
+    return (error, largestBranch)
+}
+
 public func pruneNode(node : TreeNode, data : DataSet) -> Double {
     let instances = insideRules(data: data, rules: rulesForNode(n: node))
     let leafClasses : (classVal : Int, distribution : [Int:Double]) = mostFreq(data: instances)
@@ -1887,8 +1921,9 @@ public func pruneNode(node : TreeNode, data : DataSet) -> Double {
         let e1 = pruneNode(node: node.insideChildRule!, data : instances)
         let e2 = pruneNode(node: node.outsideChildRule!, data : instances)
         let treeError = (e1 + e2)
+        let branchError = errorFromLargestBranch(node: node, data: instances)
     
-        if(leafError < treeError) {
+        if(leafError < treeError+0.1 && leafError < branchError.error+0.1) {
             node.insideChildRule = nil
             node.outsideChildRule = nil
             node.classVal = leafClasses.classVal
@@ -1896,7 +1931,19 @@ public func pruneNode(node : TreeNode, data : DataSet) -> Double {
             return leafError
         }
         else {
-            return e1 + e2
+            if(branchError.error < treeError+0.1) {
+                branchError.branch.parent = node.parent
+                if(node.parent?.insideChildRule === node) {
+                    node.parent?.insideChildRule = branchError.branch
+                }
+                else {
+                    node.parent?.outsideChildRule = branchError.branch
+                }
+                return pruneNode(node: branchError.branch, data: instances)
+            }
+            else {
+                return e1 + e2
+            }
         }
     }
     else {
@@ -1906,7 +1953,7 @@ public func pruneNode(node : TreeNode, data : DataSet) -> Double {
 
 public func errorEstimate(e : Double, N : Double) -> Double {
     let CF = 0.25
-    let z = 0.69
+    let z = 0.6744897501960816
     if(e < 1) {
         return Double(N)*(1 - pow(CF, 1/Double(N)))
     }
