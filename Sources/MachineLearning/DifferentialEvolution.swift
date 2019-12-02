@@ -8,7 +8,7 @@
 import Foundation
 
 protocol DifferentialEvolution {
-    func EvaluateCost(parameters : [Double]) -> Double
+    mutating func EvaluateCost(parameters : [Double]) -> Double
     func NumberOfParameters() -> Int
     func GetConstraints() -> [(min : Double, max : Double)]
     mutating func GetInitialCandidate() -> [Double]

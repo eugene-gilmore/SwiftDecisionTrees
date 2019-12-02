@@ -1388,7 +1388,15 @@ protocol ParallelCoordinatesSplit {
     var dataset : DataSet { get }
     var currentAttributes : [Int] { get }
     var bestSingleSplits : [[Double]]? { get set }
+    var minSplit : Double? { get set }
 }
+
+enum CostMethod {
+    case Gain
+    case GainRatio
+    case InverseGain
+}
+
 
 extension ParallelCoordinatesSplit {
     func NumberOfParameters() -> Int {
@@ -1405,7 +1413,11 @@ extension ParallelCoordinatesSplit {
         return [locationXConstraint, locationYConstraint, locationXConstraint, locationYConstraint]
     }
     
-    func EvaluateCost(parameters: [Double]) -> Double {
+    mutating func EvaluateCost(parameters: [Double]) -> Double {
+        EvaluateCost(parameters: parameters, costMethod: .InverseGain)
+    }
+    
+    mutating func EvaluateCost(parameters: [Double], costMethod: CostMethod) -> Double {
         let att = currentAttributes.map { abs($0) }
         let flipped = currentAttributes.map { $0 < 0}
         //let rule = PCRegionRule(region: Circle(center: (x : parameters[0], y : parameters[1]), radius: parameters[2]), attributes: att, axisSeperation : 0.5, axisMin : [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax : [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])
@@ -1425,15 +1437,28 @@ extension ParallelCoordinatesSplit {
             }
         }
         distribution.invalidateCache()
-        if(distribution.weightSubset(i: 0).isZero || distribution.weightSubset(i: 1).isZero) {
-            return Double.infinity
+        if(minSplit == nil) {
+            minSplit = min(max(2.0, 0.1*Double(Double(distribution.totalWeight()-distribution.numMissing)/Double(dataset.classes.count))), 25.0)
         }
-        let g = gain(distribution: distribution)
-        if(g < 0.00001) {
-            return Double.infinity
+        if(distribution.weightSubset(i: 0) < minSplit! || distribution.weightSubset(i: 1) < minSplit!) {
+            if(costMethod == .InverseGain) {
+                return Double.infinity
+            }
+            return 0
         }
-        else {
-            return 1/g //+ parameters[2]*parameters[3]
+        switch costMethod {
+        case .InverseGain:
+            let g = gain(distribution: distribution)
+            if(g < 0.00001) {
+                return Double.infinity
+            }
+            else {
+                return 1/g //+ parameters[2]*parameters[3]
+            }
+        case .Gain:
+            return gain(distribution: distribution)
+        case .GainRatio:
+            return gainRatio(distribution: distribution)
         }
     }
     
@@ -1546,6 +1571,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         var bestCost = Double.infinity
         var bestParameters : [Double] = []
         var bestIsFlipped = false
+        var best : [(attributes: [Int], gain : Double, gainRatio: Double, parameters : [Double], secondFlipped: Bool)] = []
         let sema = DispatchSemaphore(value: 1)
         let group = DispatchGroup()
         progress?.reset(tasks: 100*50*dataset.numAttributes()*(dataset.numAttributes()-1))
@@ -1562,14 +1588,18 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
                     var copy = cp
                     copy.currentAttributes = [i, k ? -j : j]
                     copy.dataset = DataSet(dataset: cp.dataset, copyInstances: true)
-                    var parameters = copy.Optimize(iterations: 100, populationSize: 50, mutationFactor: 0.6, crossoverFactor: 0.4, percentageInitialProvided: 0.15, onIterationComplete: {progress?.taskComplete()})
-                    let c = copy.EvaluateCost(parameters: parameters)
+                    copy.minSplit = nil
+                    let parameters = copy.Optimize(iterations: 100, populationSize: 50, mutationFactor: 0.6, crossoverFactor: 0.4, percentageInitialProvided: 0.15, onIterationComplete: {progress?.taskComplete()})
+                    let gain = copy.EvaluateCost(parameters: parameters, costMethod: .Gain)
+                    let gainRatio = copy.EvaluateCost(parameters: parameters, costMethod: .GainRatio)
                     sema.wait()
-                    if(c < bestCost) {
-                        bestCost = c
+                    if(gain >= 0.00001) {
+                        let b = (attributes: [i,j], gain: gain, gainRatio: gainRatio, parameters: parameters, secondFlipped: k)
+                        best.append(b)
+                        /*bestCost = c
                         bestAttIndex = [i,j]
                         bestIsFlipped = k
-                        bestParameters = parameters
+                        bestParameters = parameters*/
                     }
                     sema.signal()
                     group.leave()
@@ -1580,24 +1610,36 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         
         group.wait()
         
-        if(bestCost.isInfinite) {
+        if(best.isEmpty) {
             return nil
         }
         
-        let att = bestAttIndex
+        let averageGain = best.reduce(0, {$0 + $1.gain})/Double(best.count)
+        var bestGainRatio = 0.0
+        var bestIndex = 0
+        for s in 0..<best.count {
+            if(best[s].gain > averageGain && best[s].gainRatio > bestGainRatio) {
+                bestIndex = s
+                bestGainRatio = best[s].gainRatio
+            }
+        }
+        let result = best[bestIndex]
+        
         //print("Final Cost \(bestCost)")
         //return Rule.PCRegion([PCRegionRule(region: Circle(center: (x : bestParameters[0], y : bestParameters[1]), radius: bestParameters[2]), attributes: att, axisSeperation : 0.5, axisMin : [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax : [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
-        return Rule.PCRegion([PCRegionRule(region: Rectangle(left: bestParameters[0], right: bestParameters[2], top: bestParameters[1], bottom: bestParameters[3]), attributes: att, axisSeperation: 0.5, axisMin: [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax: [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,bestIsFlipped])])
+        return Rule.PCRegion([PCRegionRule(region: Rectangle(left: result.parameters[0], right: result.parameters[2], top: result.parameters[1], bottom: result.parameters[3]), attributes: result.attributes, axisSeperation: 0.5, axisMin: [dataset.attributes[result.attributes[0]].min!, dataset.attributes[result.attributes[1]].min!], axisMax: [dataset.attributes[result.attributes[0]].max!, dataset.attributes[result.attributes[1]].max!], attributesFlipped : [false,result.secondFlipped])])
     }
     
     public init(dataset : DataSet) {
         self.dataset = dataset
         currentAttributes = [0,0]
+        minSplit = nil
     }
     
     public var dataset : DataSet
     internal var currentAttributes : [Int]
     internal var bestSingleSplits : [[Double]]?
+    internal var minSplit: Double?
 }
 
 public struct HillClimberSplit: ParallelCoordinatesSplit {
@@ -1613,6 +1655,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
         mode = m
         intersectionsSortedX = []
         intersectionsSortedY = []
+        minSplit = nil
     }
     
     mutating func CalculateIntersections() {
@@ -1755,6 +1798,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
     internal var intersectionsSortedX: [(x: Double, y: Double)]
     internal var intersectionsSortedY: [(x: Double, y: Double)]
     public var mode : Mode
+    internal var minSplit: Double?
 }
 
 public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = false) -> (rule: Rule?, gainRatio: Double) {
@@ -1785,7 +1829,8 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
             let freqTable = computeFreqTable(data: dataCopy)
             var minVal : Double = 0
             var maxVal : Double = 0
-            let minSplit = min(max(2.0, 0.1*Double(Double(dataCopy.instances.count-numMissing)/Double(dataCopy.classes.count))), 25.0)
+            let distribution = splitDistribution(firstIndex: 0, lastIndex: data.instances.count-1-numMissing, numMissing: numMissing, data: data, freqTable: freqTable)
+            let minSplit = min(max(2.0, 0.1*Double(Double(distribution.insideCount)/Double(dataCopy.classes.count))), 25.0)
             var lastMin : Double? = nil
             var iRange = 0...0
             if(twoValueSplit) {
