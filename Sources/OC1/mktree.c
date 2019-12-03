@@ -99,6 +99,7 @@ void setDatasetParams(int dimensions, int categories) {
 /*			classify (classify.c)				*/
 /* Is called by modules : None.						*/
 /************************************************************************/
+#if 0
 main (argc, argv)
      int argc;
 char *argv[];
@@ -368,6 +369,7 @@ char *argv[];
 
   print_log_and_exit();
 }
+#endif
 
 /************************************************************************/
 /* Module name : allocate_structures					*/ 
