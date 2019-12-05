@@ -1616,11 +1616,14 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         
         let averageGain = best.reduce(0, {$0 + $1.gain})/Double(best.count)
         var bestGainRatio = 0.0
+        var bestGain = 0.0
         var bestIndex = 0
         for s in 0..<best.count {
-            if(best[s].gain > averageGain && best[s].gainRatio > bestGainRatio) {
+            //if(best[s].gain > averageGain && best[s].gainRatio > bestGainRatio) {
+            if(best[s].gain > bestGain) {
                 bestIndex = s
-                bestGainRatio = best[s].gainRatio
+                //bestGainRatio = best[s].gainRatio
+                bestGain = best[s].gain
             }
         }
         let result = best[bestIndex]
