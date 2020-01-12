@@ -1109,16 +1109,17 @@ public func distribution(data : DataSet) ->  [Int : Double] {
 //}
 
 public func mostFreq(data : DataSet) -> (Int, [Int : Double]) {
-    let maxs = distribution(data: data)
+    let m = distribution(data: data)
+    let maxs = m.sorted(by: {$0.key < $1.key})
     var max = 0.0
     var maxClass = 0
     for(classVal, count) in maxs {
-        if(count > max) {
+        if(count > max + 0.0001) {
             max = count
             maxClass = classVal
         }
     }
-    return (maxClass, maxs)
+    return (maxClass, m)
 }
 
 public func freq(indexs : Set<Int>, data : [Point], c : Int) -> Int {
@@ -1489,7 +1490,7 @@ extension ParallelCoordinatesSplit {
                          top = 1.0 - top
                          bottom = 1.0 - bottom
                          }*/
-                        bestSingleSplits[attribute] = [0, top, 0.01, bottom]
+                        bestSingleSplits[attribute] = [0, top, 0.0001, bottom]
                         /*if(attribute == 0) {
                          bestSingleSplits![0] = [0, top, 0.01, bottom]
                          }
@@ -1545,7 +1546,7 @@ public class Progress {
 public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoordinatesSplit {
     mutating func GetInitialCandidate() -> [Double] {
         var result : [Double] = []
-        if(Bool.random()) {
+        if(Bool.random() || true) {
             result = bestSingleSplits![abs(currentAttributes[0])]
             if(currentAttributes[0] < 0 && result.count == 4) {
                 result[1] = 1.0 - result[1]
@@ -1555,7 +1556,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         else {
             result = bestSingleSplits![abs(currentAttributes[1])]
             if(result.count == 4) {
-                result[0] = 0.99
+                result[0] = 0.9999
                 result[2] = 1.0
                 if(currentAttributes[1] < 0) {
                     result[1] = 1.0 - result[1]
@@ -1577,8 +1578,8 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         progress?.reset(tasks: 100*50*dataset.numAttributes()*(dataset.numAttributes()-1))
         CalculateBestSingleSplits()
         var cp = self
-        for i in 0..<(dataset.numAttributes()-1) {//dataset.numAttributes() {
-            for j in (i+1)...(i+1) {//<dataset.numAttributes() {
+        for i in 0..<dataset.numAttributes() {//dataset.numAttributes() {
+            for j in i==(dataset.numAttributes()-1) ? 0...0 : (i+1)...(i+1) {//<dataset.numAttributes() {
                 if(dataset.attributes[i].min == nil || dataset.attributes[j].min == nil) { //attriubte value is missing for all instances
                     continue
                 }
@@ -1614,23 +1615,68 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
             return nil
         }
         
+        best.sort(by: {
+            if($0.attributes[0] == $1.attributes[0]) {
+                if($0.attributes[1] == $1.attributes[1]) {
+                    return $1.secondFlipped
+                }
+                return $0.attributes[1] < $1.attributes[1]
+            }
+            else {
+                return $0.attributes[0] < $1.attributes[1]
+            }
+        })
+        
         let averageGain = best.reduce(0, {$0 + $1.gain})/Double(best.count)
         var bestGainRatio = 0.0
         var bestGain = 0.0
         var bestIndex = 0
         for s in 0..<best.count {
-            //if(best[s].gain > averageGain && best[s].gainRatio > bestGainRatio) {
-            if(best[s].gain > bestGain) {
+            if(best[s].gain > averageGain && best[s].gainRatio > bestGainRatio) {
+            //if(best[s].gain > bestGain) {
                 bestIndex = s
-                //bestGainRatio = best[s].gainRatio
-                bestGain = best[s].gain
+                bestGainRatio = best[s].gainRatio
+                //bestGain = best[s].gain
             }
         }
-        let result = best[bestIndex]
+        var result = best[bestIndex]
+
+        if(result.parameters[1] < result.parameters[3]) {
+            result.parameters.swapAt(1, 3)
+        }
+        if(abs(1 - result.parameters[1]) < 0.01)  {
+            result.parameters[1] = 1 + result.parameters[1] - result.parameters[3]
+        }
+
+        if(abs(result.parameters[3]) < 0.01)  {
+            result.parameters[3] = -(result.parameters[1] - result.parameters[3])
+        }
+        
+        let pcRule = Rule.PCRegion([PCRegionRule(region: Rectangle(left: result.parameters[0], right: result.parameters[2], top: result.parameters[1], bottom: result.parameters[3]), attributes: result.attributes, axisSeperation: 0.5, axisMin: [dataset.attributes[result.attributes[0]].min!, dataset.attributes[result.attributes[1]].min!], axisMax: [dataset.attributes[result.attributes[0]].max!, dataset.attributes[result.attributes[1]].max!], attributesFlipped : [false,result.secondFlipped])])
+        
+//        let allIndexes = Set<Int>(0..<dataset.instances.count)
+//        let c45 = findBestSplit(data: dataset)
+//        let c45Inside = insideRules(indexs: allIndexes, data: dataset, rules: [(rule: c45.rule!, invert: false)])
+//        let pcInside = insideRules(indexs: allIndexes, data: dataset, rules: [(rule: c45.rule!, invert: false)])
+//
+//        if(pcInside != c45Inside) {
+//            print("Different RULES!!")
+//        }
+//
+//        let c45version = pcoordToAxis(rule: PCRegionRule(region: Rectangle(left: result.parameters[0], right: result.parameters[2], top: result.parameters[1], bottom: result.parameters[3]), attributes: result.attributes, axisSeperation: 0.5, axisMin: [dataset.attributes[result.attributes[0]].min!, dataset.attributes[result.attributes[1]].min!], axisMax: [dataset.attributes[result.attributes[0]].max!, dataset.attributes[result.attributes[1]].max!], attributesFlipped : [false,result.secondFlipped]))
+//        switch c45.rule! {
+//        case let .AxisSelection(selection):
+//            if(c45version.axisIndex != selection[0].axisIndex || abs((c45version.rangeMax ?? 0.0) - (selection[0].rangeMax ?? 0.0)) > 0.01) {
+//                print("Different RULES!")
+//                let temp = findBestSplit(data: dataset)
+//            }
+//        default:
+//            print("DSFJLIDSF")
+//        }
         
         //print("Final Cost \(bestCost)")
         //return Rule.PCRegion([PCRegionRule(region: Circle(center: (x : bestParameters[0], y : bestParameters[1]), radius: bestParameters[2]), attributes: att, axisSeperation : 0.5, axisMin : [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax : [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])])
-        return Rule.PCRegion([PCRegionRule(region: Rectangle(left: result.parameters[0], right: result.parameters[2], top: result.parameters[1], bottom: result.parameters[3]), attributes: result.attributes, axisSeperation: 0.5, axisMin: [dataset.attributes[result.attributes[0]].min!, dataset.attributes[result.attributes[1]].min!], axisMax: [dataset.attributes[result.attributes[0]].max!, dataset.attributes[result.attributes[1]].max!], attributesFlipped : [false,result.secondFlipped])])
+        return pcRule
     }
     
     public init(dataset : DataSet) {
@@ -1643,6 +1689,13 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
     internal var currentAttributes : [Int]
     internal var bestSingleSplits : [[Double]]?
     internal var minSplit: Double?
+}
+
+func pcoordToAxis(rule: PCRegionRule) -> AxisSelectionRule {
+    let result = AxisSelectionRule(rangeMin: nil, rangeMax: nil, axisIndex: rule.Attributes[0])
+    let rect = rule.Region as! Rectangle
+    result.rangeMax = ((rule.axisMax[0] - rule.axisMin[0])*rect.top)+rule.axisMin[0]
+    return result
 }
 
 public struct HillClimberSplit: ParallelCoordinatesSplit {
@@ -1804,7 +1857,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
     internal var minSplit: Double?
 }
 
-public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = false) -> (rule: Rule?, gainRatio: Double) {
+public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit : Bool = false, j48Mode : Bool = true) -> (rule: Rule?, gainRatio: Double) {
     var range = 0..<data.attributes.count
     if let att = attribute {
         range = att..<(att+1)
@@ -1917,7 +1970,7 @@ public func findBestSplit(data : DataSet, attribute : Int? = nil, twoValueSplit 
     var bestModelGr = 0.0
     var bestIndex = 0
     for a in range {
-        if let g = bestGainRatio[index], bestGain[index]! >= (averageGain-0.001) && g > bestModelGr {
+        if let g = bestGainRatio[index], (!j48Mode || bestGain[index]! >= (averageGain-0.001)) && g > bestModelGr {
             bestModelGr = g
             bestIndex = index
             bestAttribute = a
