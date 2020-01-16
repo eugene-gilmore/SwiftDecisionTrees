@@ -1028,6 +1028,12 @@ public func insideRegionRule(instance : Point, data : DataSet, rule : RegionRule
 	if let pcrule = rule as? PCRegionRule {
 		var start : (x : Double, y : Double) = (0, (v1-pcrule.axisMin[0])/(pcrule.axisMax[0]-pcrule.axisMin[0]))
 		var end : (x : Double, y : Double) = (1, (v2-pcrule.axisMin[1])/(pcrule.axisMax[1]-pcrule.axisMin[1]))
+        if(start.y.isNaN) {
+            start.y = 0.5
+        }
+        if(end.y.isNaN) {
+            end.y = 0.5
+        }
         if(pcrule.AttributeFlipped[0]) {
             start.y  = 1 - start.y
         }
