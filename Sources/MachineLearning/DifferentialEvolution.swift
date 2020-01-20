@@ -8,18 +8,30 @@
 import Foundation
 
 protocol DifferentialEvolution {
-    mutating func EvaluateCost(parameters : [Double]) -> Double
+    mutating func EvaluateCost(parameters : [Double]) -> [Double]
     func NumberOfParameters() -> Int
     func GetConstraints() -> [(min : Double, max : Double)]
     mutating func GetInitialCandidate() -> [Double]
 }
 
 extension DifferentialEvolution {
+    public static func costLess(cost: [Double], lessThen: [Double]) -> Bool {
+        for i in 0..<min(cost.count, lessThen.count) {
+            if(cost[i] > lessThen[i]) {
+                return false
+            }
+            if(abs(cost[i] - lessThen[i]) > 0.00000001) {
+                return true
+            }
+        }
+        return Bool.random()
+    }
+    
     mutating func Optimize(iterations : Int, populationSize : Int, mutationFactor : Double, crossoverFactor : Double, percentageInitialProvided : Double, onIterationComplete : (() -> Void)? = nil) -> [Double] {
         var population = [[Double]](repeating: [Double](repeating: 0, count: NumberOfParameters()), count: populationSize)
         let constraints = GetConstraints()
-        var minCostPerAgent = [Double](repeating: 0, count: populationSize)
-        var minCost = Double.infinity
+        var minCostPerAgent : [[Double]] = Array(repeating: [], count: populationSize)
+        var minCost = [Double.infinity]
         var bestAgentIndex = 0
         
         var randomPop = 0
@@ -44,7 +56,7 @@ extension DifferentialEvolution {
             minCostPerAgent[p] = EvaluateCost(parameters: population[p])
         }
         for p in 0..<populationSize {
-            if(minCostPerAgent[p] < minCost) {
+            if(Self.costLess(cost: minCostPerAgent[p], lessThen: minCost)) {
                 minCost = minCostPerAgent[p]
                 bestAgentIndex = p
             }
@@ -90,12 +102,12 @@ extension DifferentialEvolution {
                 }
                 
                 let newCost = EvaluateCost(parameters: z)
-                if(newCost < minCostPerAgent[x]) {
+                if(Self.costLess(cost: newCost, lessThen: minCostPerAgent[x])) {
                     population[x] = z
                     minCostPerAgent[x] = newCost
                 }
                 
-                if(minCostPerAgent[x] < minCost) {
+                if(Self.costLess(cost: minCostPerAgent[x], lessThen: minCost)) {
                     minCost = minCostPerAgent[x]
                     bestAgentIndex = x
                 }

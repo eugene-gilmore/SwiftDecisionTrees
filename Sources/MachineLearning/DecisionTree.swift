@@ -575,6 +575,36 @@ public typealias PathToNode = [(rule : Rule, invert : Bool)]
 public protocol Shape : JSONCodable {
 }
 
+public class Line : Shape {
+    public var points : [(x : Double, y: Double)]
+    
+    public init() {
+        points = [(0, 0), (0,0)]
+    }
+    
+    public init(x0 : Double, y0 : Double, x1 : Double, y1 : Double) {
+        points = [(x0, y0), (x1, y1)]
+    }
+    
+    public func toJSON() throws -> Any {
+        return try JSONEncoder.create { (encoder) -> Void in
+            try encoder.encode(points[0].x, key: "p1x")
+            try encoder.encode(points[0].y, key: "p1y")
+            try encoder.encode(points[1].x, key: "p2x")
+            try encoder.encode(points[1].y, key: "p2y")
+        }
+    }
+    
+    public required init(object: JSONObject) throws {
+        let decoder = JSONDecoder(object: object)
+        points = [(0, 0), (0,0)]
+        points[0].x = try decoder.decode("p1x")
+        points[0].y = try decoder.decode("p1y")
+        points[1].x = try decoder.decode("p2x")
+        points[1].y = try decoder.decode("p2y")
+    }
+}
+
 public class Rectangle : Shape {
 	public var left : Double
 	public var right : Double
@@ -871,7 +901,7 @@ public func insideRule(instance : Point, data : DataSet, rule : Rule) -> Bool? {
 		}
 	case let .PCRegion(region):
 		for x in region {
-            guard let i = insideRegionRule(instance: instance, data: data, rule: x) else {
+            guard let (i,_) = insideRegionRule(instance: instance, data: data, rule: x) else {
                 return nil
             }
 			if(!i) {
@@ -880,7 +910,7 @@ public func insideRule(instance : Point, data : DataSet, rule : Rule) -> Bool? {
 		}
 	case let .Region(region):
 		for x in region {
-            guard let i = insideRegionRule(instance: instance, data: data, rule: x) else {
+            guard let (i,_) = insideRegionRule(instance: instance, data: data, rule: x) else {
                 return nil
             }
 			if(!i) {
@@ -988,6 +1018,88 @@ public func lineRectangleIntersection (line : (x0 : Double, y0 : Double, x1 : Do
 	return true;
 }
 
+public func PCLineRectangleIntersection (line : (x0 : Double, y0 : Double, x1 : Double, y1 : Double),
+                                       rectangle : (left : Double, right : Double, top : Double, bottom : Double)) ->
+    (insideRegion : Bool, distance : Double) {
+        let l = Line(x0: line.x0, y0: line.y0, x1: line.x1, y1: line.y1)
+        let rl = [Line(x0: rectangle.left, y0: rectangle.bottom, x1: rectangle.left, y1: rectangle.top),
+                  Line(x0: rectangle.left, y0: rectangle.top, x1: rectangle.right, y1: rectangle.top),
+                  Line(x0: rectangle.right, y0: rectangle.top, x1: rectangle.right, y1: rectangle.bottom),
+                  Line(x0: rectangle.right, y0: rectangle.bottom, x1: rectangle.left, y1: rectangle.bottom)]
+        var intersects : [(x : Double, y : Double)] = []
+        var rlIntersects : [Bool] = []
+        var insideRegion = false
+        for i in 0..<rl.count {
+            if let intersection = lineLineIntersection(l1: l, l2: rl[i]) {
+                intersects.append(intersection)
+                rlIntersects.append(true)
+                insideRegion = true
+            }
+            else {
+                rlIntersects.append(false)
+            }
+        }
+        if(insideRegion) {
+            if(intersects.count != 2) {
+                return (insideRegion: true, distance: 0)
+            }
+            let subSegmentCenter = (x: (intersects[0].x + intersects[1].x)/2, y: (intersects[0].y + intersects[1].y)/2)
+            var minDist = Double.infinity
+            for i in rl {
+                let distC = distToLineSegment(point: subSegmentCenter, line: i)
+                if(distC < minDist) {
+                    minDist = distC
+                }
+            }
+            //gm = pow(gm, 0.25)
+            return (insideRegion: true, distance: minDist)
+        }
+        func lineSegDist(l1 : Line, l2 : Line) -> Double {
+            let d1 = distToLineSegment(point: l1.points[0], line: l2)
+            let d2 = distToLineSegment(point: l1.points[1], line: l2)
+            let d3 = distToLineSegment(point: l2.points[0], line: l1)
+            let d4 = distToLineSegment(point: l2.points[1], line: l1)
+            return min(min(d1, d2), min(d3, d4))
+        }
+        
+        var minDistance : Double? = nil
+        for i in 0..<rl.count {
+            if(!rlIntersects[i]) {
+                let d = lineSegDist(l1: rl[i], l2: l)
+                if(minDistance == nil) {
+                    minDistance = d
+                }
+                else {
+                    minDistance = min(d, minDistance!)
+                }
+            }
+        }
+        return (insideRegion: false, distance: minDistance!)
+}
+
+public func distToLineSegment(point : (x : Double, y : Double), line : Line) -> Double {
+    func dist2(p1 : (x : Double, y : Double), p2 : (x : Double, y : Double)) -> Double {
+        let x = ((p1.x - p2.x)*(p1.x - p2.x))
+        let y = ((p1.y - p2.y)*(p1.y - p2.y))
+        return x + y
+    }
+    let l2 = dist2(p1: line.points[0], p2: line.points[1])
+    if(l2 < 0.00001) {
+        return sqrt(dist2(p1: point, p2: line.points[0]))
+    }
+    var t = ((point.x - line.points[0].x) * (line.points[1].y - line.points[0].y))
+    t += ((point.y - line.points[0].y) * (line.points[1].y - line.points[0].y))
+    t /= l2
+    t = max(0, min(1, t))
+    let d2 = dist2(p1: point, p2: (x: line.points[0].x + t*(line.points[1].x - line.points[0].x),
+        y: line.points[0].y + t*(line.points[1].y - line.points[0].y)))
+    return sqrt(d2)
+}
+
+public func lineLineIntersection(l1 : Line, l2 : Line) -> (x : Double, y : Double)? {
+    return lineLineIntersection(p0_x: l1.points[0].x, p0_y: l1.points[0].y, p1_x: l1.points[1].x, p1_y: l1.points[1].y, p2_x: l2.points[0].x, p2_y: l2.points[0].y, p3_x: l2.points[1].x, p3_y: l2.points[1].y)
+}
+
 public func lineLineIntersection(p0_x : Double, p0_y : Double,p1_x : Double,p1_y : Double,
                           p2_x : Double, p2_y : Double, p3_x : Double, p3_y : Double) -> (x: Double, y: Double)? {
     let s1_x = p1_x - p0_x
@@ -1011,6 +1123,62 @@ public func lineLineIntersection(p0_x : Double, p0_y : Double,p1_x : Double,p1_y
     return nil; // No collision
 }
 
+//https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
+func lineSegmentsIntersect(l1 : Line, l2 : Line) -> Bool {
+    func onSegment(p : (x : Double, y : Double), q : (x : Double, y : Double), r : (x : Double, y : Double)) -> Bool {
+        if (q.x <= max(p.x, r.x) && q.x >= min(p.x, r.x) &&
+            q.y <= max(p.y, r.y) && q.y >= min(p.y, r.y)) {
+             return true
+        }
+        return false
+    }
+    
+    func orientation(p : (x : Double, y : Double), q : (x : Double, y : Double), r : (x : Double, y : Double)) -> Int {
+        let val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y)
+        if(abs(val) < 0.0000001) {
+            return 0
+        }
+        return (val > 0) ? 1 : 2
+    }
+    let p1 = l1.points[0]
+    let q1 = l1.points[1]
+    let p2 = l2.points[0]
+    let q2 = l2.points[1]
+    
+    let o1 = orientation(p: p1, q: q1, r: p2)
+    let o2 = orientation(p: p1, q: q1, r: q2)
+    let o3 = orientation(p: p2, q: q2, r: p1)
+    let o4 = orientation(p: p2, q: q2, r: q1)
+    
+    // General case
+    if (o1 != o2 && o3 != o4) {
+        return true
+    }
+    
+    // Special Cases
+    // p1, q1 and p2 are colinear and p2 lies on segment p1q1
+    if (o1 == 0 && onSegment(p: p1, q: p2, r: q1)) {
+         return true
+    }
+    
+    // p1, q1 and q2 are colinear and q2 lies on segment p1q1
+    if (o2 == 0 && onSegment(p: p1, q: q2, r: q1)) {
+        return true
+    }
+    
+    // p2, q2 and p1 are colinear and p1 lies on segment p2q2
+    if (o3 == 0 && onSegment(p: p2, q: p1, r: q2)) {
+        return true
+    }
+    
+    // p2, q2 and q1 are colinear and q1 lies on segment p2q2
+    if (o4 == 0 && onSegment(p: p2, q: q1, r: q2)) {
+        return true
+    }
+    
+    return false
+}
+
 public func lineCircleIntersection( line : (x0 : Double, y0 : Double, x1 : Double, y1 : Double), circle : Circle) -> Bool {
     let dx = line.x1 - line.x0
     let dy = line.y1 - line.y0
@@ -1021,7 +1189,7 @@ public func lineCircleIntersection( line : (x0 : Double, y0 : Double, x1 : Doubl
     return A > 0.00000001 && det > 0
 }
 
-public func insideRegionRule(instance : Point, data : DataSet, rule : RegionRule) -> Bool? {
+public func insideRegionRule(instance : Point, data : DataSet, rule : RegionRule, calculateDistance : Bool = false) -> (inside: Bool, distance: Double?)? {
     guard let v1 = instance.values[rule.Attributes[0]] else {
         return nil
     }
@@ -1044,26 +1212,30 @@ public func insideRegionRule(instance : Point, data : DataSet, rule : RegionRule
             end.y  = 1 - end.y
         }
         if let rec = rule.Region as? Rectangle {
-            return lineRectangleIntersection(line: (start.x, start.y, end.x, end.y), rectangle: (rec.left, rec.right, rec.top, rec.bottom))
+            if(calculateDistance) {
+                let r = PCLineRectangleIntersection(line: (start.x, start.y, end.x, end.y), rectangle: (rec.left, rec.right, rec.top, rec.bottom))
+                return (inside: r.insideRegion, distance: r.distance)
+            }
+            return (inside: lineRectangleIntersection(line: (start.x, start.y, end.x, end.y), rectangle: (rec.left, rec.right, rec.top, rec.bottom)), distance: nil)
         }
         else if let cir = rule.Region as? Circle {
             start.y = 1.7*start.y
             end.x = 0.5
             end.y = 1.7*end.y
-            return lineCircleIntersection(line: (start.x, start.y, end.x, end.y), circle: cir)
+            return (inside: lineCircleIntersection(line: (start.x, start.y, end.x, end.y), circle: cir), distance: nil)
         }
 	}
 	else {
         if let rec = rule.Region as? Rectangle {
-            return v1 >= rec.left && v1 <= rec.right && v2 >= rec.bottom && v2 <= rec.top
+            return (inside: v1 >= rec.left && v1 <= rec.right && v2 >= rec.bottom && v2 <= rec.top, distance: nil)
         }
         else if let cir = rule.Region as? Circle {
             let dx = pow(v1-cir.center.x, 2.0)
             let dy = pow(v2-cir.center.y, 2.0)
-            return sqrt(dx+dy) < cir.radius
+            return (inside: sqrt(dx+dy) < cir.radius, distance: nil)
         }
 	}
-	return false
+    return (inside: false, distance: nil)
 }
 
 //func insideRegionRule(indexs : Set<Int>, data : DataSet, rule : RegionRule) -> Set<Int> {
@@ -1423,23 +1595,27 @@ extension ParallelCoordinatesSplit {
         return [locationXConstraint, locationYConstraint, locationXConstraint, locationYConstraint]
     }
     
-    mutating func EvaluateCost(parameters: [Double]) -> Double {
-        EvaluateCost(parameters: parameters, costMethod: .InverseGain)
+    mutating func EvaluateCost(parameters: [Double]) -> [Double] {
+        return EvaluateCost(parameters: parameters, costMethod: .InverseGain)
     }
     
-    mutating func EvaluateCost(parameters: [Double], costMethod: CostMethod) -> Double {
+    mutating func EvaluateCost(parameters: [Double], costMethod: CostMethod) -> [Double] {
         let att = currentAttributes.map { abs($0) }
         let flipped = currentAttributes.map { $0 < 0}
         //let rule = PCRegionRule(region: Circle(center: (x : parameters[0], y : parameters[1]), radius: parameters[2]), attributes: att, axisSeperation : 0.5, axisMin : [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax : [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : [false,false])
         let rule = PCRegionRule(region: Rectangle(left: parameters[0], right: parameters[2], top: parameters[1], bottom: parameters[3]), attributes: att, axisSeperation: 0.5, axisMin: [dataset.attributes[att[0]].min!, dataset.attributes[att[1]].min!], axisMax: [dataset.attributes[att[0]].max!, dataset.attributes[att[1]].max!], attributesFlipped : flipped)
         let distribution = Distribution(numSubsets: 2, numClasses: dataset.classes.count)
+        var insideDistance = Double.infinity
+        var outsideDistance = Double.infinity
         for p in 0..<dataset.instances.count {
-            if let inRule = insideRegionRule(instance: dataset.instances[p], data: dataset, rule: rule) {
+            if let (inRule,distance) = insideRegionRule(instance: dataset.instances[p], data: dataset, rule: rule, calculateDistance: true) {
                 if(inRule) {
                     distribution.subsets[0][dataset.instances[p].classIndex] += dataset.weights[p] ?? 1.0
+                    insideDistance += min(insideDistance, distance!)
                 }
                 else {
                     distribution.subsets[1][dataset.instances[p].classIndex] += dataset.weights[p] ?? 1.0
+                    outsideDistance = min(outsideDistance, distance!)
                 }
             }
             else {
@@ -1447,28 +1623,31 @@ extension ParallelCoordinatesSplit {
             }
         }
         distribution.invalidateCache()
+        //insideDistance /= distribution.weightSubset(i: 0)
+        let distCost = 1/(insideDistance*pow(outsideDistance,1))
         if(minSplit == nil) {
             minSplit = min(max(2.0, 0.1*Double(Double(distribution.totalWeight()-distribution.numMissing)/Double(dataset.classes.count))), 25.0)
         }
         if(distribution.weightSubset(i: 0) < minSplit! || distribution.weightSubset(i: 1) < minSplit!) {
             if(costMethod == .InverseGain) {
-                return Double.infinity
+                return [Double.infinity]
             }
-            return 0
+            return [0]
         }
+        
         switch costMethod {
         case .InverseGain:
             let g = gain(distribution: distribution)
             if(g < 0.00001) {
-                return Double.infinity
+                return [Double.infinity]
             }
             else {
-                return 1/g //+ parameters[2]*parameters[3]
+                return [1/g,distCost] //+ parameters[2]*parameters[3]
             }
         case .Gain:
-            return gain(distribution: distribution)
+            return [gain(distribution: distribution), distCost]
         case .GainRatio:
-            return gainRatio(distribution: distribution)
+            return [gainRatio(distribution: distribution), distCost]
         }
     }
     
@@ -1581,7 +1760,7 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         var bestCost = Double.infinity
         var bestParameters : [Double] = []
         var bestIsFlipped = false
-        var best : [(attributes: [Int], gain : Double, gainRatio: Double, parameters : [Double], secondFlipped: Bool)] = []
+        var best : [(attributes: [Int], gain : Double, gainRatio: Double, outsideDistance : Double, parameters : [Double], secondFlipped: Bool)] = []
         let sema = DispatchSemaphore(value: 1)
         let group = DispatchGroup()
         progress?.reset(tasks: 100*50*dataset.numAttributes()*(dataset.numAttributes()-1))
@@ -1603,8 +1782,8 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
                     let gain = copy.EvaluateCost(parameters: parameters, costMethod: .Gain)
                     let gainRatio = copy.EvaluateCost(parameters: parameters, costMethod: .GainRatio)
                     sema.wait()
-                    if(gain >= 0.00001) {
-                        let b = (attributes: [i,j], gain: gain, gainRatio: gainRatio, parameters: parameters, secondFlipped: k)
+                    if(gain[0] >= 0.00001) {
+                        let b = (attributes: [i,j], gain: gain[0], gainRatio: gainRatio[0], outsideDistance: gain[1], parameters: parameters, secondFlipped: k)
                         best.append(b)
                         /*bestCost = c
                         bestAttIndex = [i,j]
@@ -1638,20 +1817,30 @@ public struct DifferentialEvoluationSplit : DifferentialEvolution, ParallelCoord
         
         let averageGain = best.reduce(0, {$0 + $1.gain})/Double(best.count)
         var bestGainRatio = 0.0
+        var bestOutsideDistance = Double.infinity
         var bestGain = 0.0
         var bestIndex = 0
         for s in 0..<best.count {
-            if(best[s].gain > averageGain && best[s].gainRatio > bestGainRatio) {
+            if(best[s].gain > averageGain && Self.costLess(cost: [1/best[s].gainRatio,best[s].outsideDistance], lessThen: [bestGainRatio.isZero ? Double.infinity : 1/bestGainRatio,bestOutsideDistance])) {
             //if(best[s].gain > bestGain) {
-                bestIndex = s
-                bestGainRatio = best[s].gainRatio
-                //bestGain = best[s].gain
+                if(best[s].outsideDistance < bestOutsideDistance) {
+                    bestIndex = s
+                    bestGainRatio = best[s].gainRatio
+                    bestOutsideDistance = best[s].outsideDistance
+                    //bestGain = best[s].gain
+                }
             }
         }
         var result = best[bestIndex]
+        
+        currentAttributes = result.attributes
+        EvaluateCost(parameters: result.parameters)
 
         if(result.parameters[1] < result.parameters[3]) {
             result.parameters.swapAt(1, 3)
+        }
+        if(result.parameters[2] < result.parameters[0]) {
+            result.parameters.swapAt(2, 0)
         }
         if(abs(1 - result.parameters[1]) < 0.01)  {
             result.parameters[1] = 1 + result.parameters[1] - result.parameters[3]
@@ -1813,7 +2002,7 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
                             var newCandidate = currentCandidate
                             newCandidate[movements[i].Index] += stepSize*movements[i].Direction
                             let newCost = copy.EvaluateCost(parameters: newCandidate)
-                            if(newCost < bestNewCost) {
+                            if(newCost[0] < bestNewCost[0]) {
                                 bestNewCandidate = newCandidate
                                 bestNewCost = newCost
                             }
@@ -1835,8 +2024,8 @@ public struct HillClimberSplit: ParallelCoordinatesSplit {
                         }
                     }
                     sema.wait()
-                    if(currentCost < bestCost) {
-                        bestCost = currentCost
+                    if(currentCost[0] < bestCost) {
+                        bestCost = currentCost[0]
                         bestAttIndex = [i,j]
                         bestParameters = currentCandidate
                     }
