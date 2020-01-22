@@ -1611,7 +1611,7 @@ extension ParallelCoordinatesSplit {
             if let (inRule,distance) = insideRegionRule(instance: dataset.instances[p], data: dataset, rule: rule, calculateDistance: true) {
                 if(inRule) {
                     distribution.subsets[0][dataset.instances[p].classIndex] += dataset.weights[p] ?? 1.0
-                    insideDistance += min(insideDistance, distance!)
+                    insideDistance = min(insideDistance, distance!)
                 }
                 else {
                     distribution.subsets[1][dataset.instances[p].classIndex] += dataset.weights[p] ?? 1.0
@@ -1623,8 +1623,14 @@ extension ParallelCoordinatesSplit {
             }
         }
         distribution.invalidateCache()
+        if(insideDistance > 0.2) {
+            insideDistance = 1.0
+        }
+        if(outsideDistance > 0.2) {
+            outsideDistance = 1.0
+        }
         //insideDistance /= distribution.weightSubset(i: 0)
-        let distCost = 1/(insideDistance*pow(outsideDistance,1))
+        let distCost = 1/(insideDistance*outsideDistance)
         if(minSplit == nil) {
             minSplit = min(max(2.0, 0.1*Double(Double(distribution.totalWeight()-distribution.numMissing)/Double(dataset.classes.count))), 25.0)
         }
