@@ -3,6 +3,9 @@ import PackageDescription
 
 let package = Package(
 	name: "SwiftDecisionTrees",
+	products: [
+		.library(name: "MachineLearning", targets: ["MachineLearning"])
+	],
 	dependencies: [
 		.package(url: "https://github.com/IBM-Swift/BlueSignals.git", .branch("master")),
 		.package(url: "https://github.com/eugene-gilmore/JSONCodable.git", .branch("master")),
