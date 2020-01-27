@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-	name: "ClassifierBuilder",
+	name: "SwiftDecisionTrees",
 	dependencies: [
 		.package(url: "https://github.com/IBM-Swift/BlueSignals.git", .branch("master")),
 		.package(url: "https://github.com/eugene-gilmore/JSONCodable.git", .branch("master")),
