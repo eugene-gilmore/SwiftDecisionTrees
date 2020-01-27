@@ -1,4 +1,4 @@
-import MachineLearning
+import SwiftDecisionTrees 
 import Foundation
 import Signals
 

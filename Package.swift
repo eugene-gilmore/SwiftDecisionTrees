@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
 	name: "SwiftDecisionTrees",
 	products: [
-		.library(name: "MachineLearning", targets: ["MachineLearning"])
+		.library(name: "SwiftDecisionTrees", targets: ["SwiftDecisionTrees"])
 	],
 	dependencies: [
 		.package(url: "https://github.com/IBM-Swift/BlueSignals.git", .branch("master")),
@@ -12,8 +12,8 @@ let package = Package(
 	],
 	targets : [
 		.target(name: "OC1", dependencies: []),
-		.target(name: "MachineLearning", dependencies: ["JSONCodable", .target(name: "OC1")]),
-		.target(name: "DecisionTreeDemo", dependencies: [.target(name: "MachineLearning"), "Signals"])
+		.target(name: "SwiftDecisionTrees", dependencies: ["JSONCodable", .target(name: "OC1")]),
+		.target(name: "DecisionTreeDemo", dependencies: [.target(name: "SwiftDecisionTrees"), "Signals"])
 	]
 )
 
