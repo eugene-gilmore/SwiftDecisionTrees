@@ -27,11 +27,13 @@ public struct Result : JSONCodable {
         else {
             tree = TreeNode()
         }
+        testSet = DataSet()
     }
     
     public init() {
         confusionMatrix = []
         tree = TreeNode()
+        testSet = DataSet()
     }
     
     public func saveToFile(filename : String) {
@@ -59,6 +61,7 @@ public struct Result : JSONCodable {
     
     public var confusionMatrix : [[Int]] //[predicted][actual]
     public var tree : TreeNode
+    public var testSet : DataSet
     
     public func accuracy() -> Double {
         var numCorrect = 0
@@ -2386,6 +2389,7 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
             }
             finishSubTree(node: result[fold].tree, data: d, fullTrainingSet: d, buildMethod: buildMethod, progress: progress?.foldProgress)
             pruneNode(node: result[fold].tree, data: d)
+            result[fold].testSet = foldSets[fold]
         
         
             result[fold].confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
