@@ -2190,6 +2190,7 @@ public enum BuildMethod {
     case HCB
     case HCR
     case OC1
+    case NC
 }
 
 public func buildOC1(data: DataSet) -> TreeNode {
@@ -2271,6 +2272,8 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
             case .HCR:
                 var hc = HillClimberSplit(dataset: data, mode: .RoundRobinImprovement)
                 node.rules = hc.getRule()
+            case .NC:
+                node.rules = findNextCavity(forClassValue: mostFreq(data: data).0, data: data)
             case .OC1:
                 let OC1Node = buildOC1(data: data)
                 node.rules = OC1Node.rules
