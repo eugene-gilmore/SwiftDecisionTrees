@@ -38,7 +38,7 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
                         result[i] = (min: v, max: v)
                     }
                     else {
-                        result[i] = (min: min(result[i]!.min, v), max: max(result[i]!.min, v))
+                        result[i] = (min: min(result[i]!.min, v), max: max(result[i]!.max, v))
                     }
                 }
             }
@@ -50,7 +50,7 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
             let att = data.getAttributes()[index]
             if let attMin = att.min, let attMax = att.max {
                 let tolerance = (attMax - attMin)/1000.0
-                if(abs(r.min - attMin) < tolerance && abs(r.max - attMin) < tolerance) {
+                if(abs(r.min - attMin) < tolerance && abs(r.max - attMax) < tolerance) {
                     return nil
                 }
             }
