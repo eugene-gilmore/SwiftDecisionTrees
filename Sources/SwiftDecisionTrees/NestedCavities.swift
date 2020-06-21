@@ -24,7 +24,7 @@ func impurity(data : DataSet, rule : Rule, forClassValue: Int) -> Double {
     return impurity(data: inside, forClassValue: forClassValue)
 }
 
-public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
+func findAllRules(forClassValue : Int, data : DataSet) -> [AxisSelectionRule]? {
     let classValueRanges = data.instances.reduce(
         Array<(min: Double, max: Double)?>(repeating: nil, count: data.numAttributes()), 
         {(prev: [(min: Double, max: Double)?], p : Point) in 
@@ -62,6 +62,14 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
     if(allRules.isEmpty) {
         return nil
     }
+    return allRules
+}
+
+public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
+    
+    guard let allRules = findAllRules(forClassValue: forClassValue, data: data) else {
+        return nil
+    }
 
     let smallestNumOther = impurity(data: data, rule: Rule.AxisSelection(allRules), forClassValue: forClassValue)
 
@@ -76,4 +84,22 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
         }
     }
     return Rule.AxisSelection(allRules)
+}
+
+public func findBestCavity(data : DataSet) -> Rule? {
+    var lowestNumOther : Double? = nil
+    var bestClass : Int? = nil
+    for c in data.classes {
+        if let allRules = findAllRules(forClassValue: c.value, data: data) {
+            let numOther = impurity(data: data, rule: Rule.AxisSelection(allRules), forClassValue: c.value)
+            if(lowestNumOther == nil || lowestNumOther! > numOther) {
+                lowestNumOther = numOther
+                bestClass = c.value
+            }
+        }
+    }
+    if let c = bestClass {
+        return findNextCavity(forClassValue: c, data: data)
+    }
+    return nil
 }

@@ -2273,7 +2273,7 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                 var hc = HillClimberSplit(dataset: data, mode: .RoundRobinImprovement)
                 node.rules = hc.getRule()
             case .NC:
-                node.rules = findNextCavity(forClassValue: mostFreq(data: data).0, data: data)
+                node.rules = findBestCavity(data: data)
             case .OC1:
                 let OC1Node = buildOC1(data: data)
                 node.rules = OC1Node.rules
