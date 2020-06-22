@@ -65,6 +65,47 @@ func findAllRules(forClassValue : Int, data : DataSet) -> [AxisSelectionRule]? {
     return allRules
 }
 
+func correctDecisionBoundaries(forRule rule : Rule, data : DataSet) -> Rule {
+    switch rule {
+    case let .AxisSelection(selections):
+        var result : [AxisSelectionRule] = []
+        for s in selections {
+            let _ = data.sortOnAttribute(attribute: s.axisIndex)
+            var index = 0
+            var newMin : Double? = nil
+            var newMax : Double? = nil
+            if let min = s.rangeMin {
+                while(data.instances[index].values[s.axisIndex] ?? Double.infinity < min) {
+                    index += 1
+                    if(index >= data.instances.count) {
+                        index -= 1
+                        break
+                    }
+                }
+                if let v = data.instances[index].values[s.axisIndex], v < min {
+                    newMin = v+(v+min)/2.0
+                }
+            }
+            if let max = s.rangeMax {
+                while(index < data.instances.count && !(data.instances[index].values[s.axisIndex] ?? Double.infinity > max)) {
+                    index += 1
+                    if(index >= data.instances.count) {
+                        index -= 1
+                        break
+                    }
+                }
+                if let v = data.instances[index].values[s.axisIndex], v > max {
+                    newMax = v+(v+max)/2.0
+                }
+            }
+            result.append(AxisSelectionRule(rangeMin: newMin, rangeMax: newMax, axisIndex: s.axisIndex))
+        }
+        return Rule.AxisSelection(result)
+    default:
+        return rule
+    }
+}
+
 public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
     
     guard let allRules = findAllRules(forClassValue: forClassValue, data: data) else {
@@ -83,7 +124,7 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
             return r
         }
     }
-    return Rule.AxisSelection(allRules)
+    return correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)
 }
 
 public func findBestCavity(data : DataSet) -> Rule? {

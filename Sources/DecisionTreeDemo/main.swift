@@ -2,6 +2,13 @@ import SwiftDecisionTrees
 import Foundation
 import Signals
 
+let datasetLocation = "/home/eugene/PHD/Datasets/"
+let resultsLocation = datasetLocation+"results/nc/"
+let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere",
+    "ClimateSimulationCrashes", "leaf", "chronic_kidney_disease", "BreastTissue", "transfusion"]
+let NUM_RUNS = 5
+let buildMethod = BuildMethod.NC
+
 //taken from https://stackoverflow.com/questions/49470358/how-can-i-return-a-float-or-double-from-normal-distribution-in-swift-4
 class MyGaussianDistribution {
     let mean: Double
@@ -69,14 +76,8 @@ func generateMostlyRandom(numAttributes: Int, numNonRandom: Int, numInstances: I
     return result
 }
 
-let datasetLocation = "/Users/eugene/PHD/Datasets/"
-let resultsLocation = datasetLocation+"results/oc1/"
 
 //generateMostlyRandom(numAttributes: 1000, numNonRandom: 5, numInstances: 200).saveAsCSV(file: datasetLocation+"generated1.csv")
-
-let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere",
-    "ClimateSimulationCrashes", "leaf", "chronic_kidney_disease", "BreastTissue", "transfusion"]
-let NUM_RUNS = 5
 
 func printDatasetStats(datasets : [String]) {
     for d in datasets {
@@ -186,7 +187,7 @@ func evaluateSize() {
         var deepestLeaft = 0.0
         for _ in 0..<NUM_RUNS {
             let tree = TreeNode()
-            finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: .OC1)
+            finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: buildMethod)
             size += Double(tree.sizeOfTree())
             deepestLeaft += Double(tree.deepestLeaf())
         }
@@ -216,7 +217,7 @@ for d in datasets {
     }
     for i in 0..<NUM_RUNS {
         let start = Date().timeIntervalSince1970
-        let result = crossValidation(data: data, buildMethod: .OC1, progress: progress, runParallel: false)
+        let result = crossValidation(data: data, buildMethod: buildMethod, progress: progress, runParallel: false)
         var aggregateResult = Result()
         aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
         for r in 0..<result.count {
