@@ -9,6 +9,25 @@ extension Array {
     }
 }
 
+extension RandomAccessCollection {
+    func binarySearch(predicate: (Iterator.Element) -> Bool) -> Index? {
+        var low = startIndex
+        var high = endIndex
+        guard predicate(self[low]), !predicate(self[index(before: high)]) else {
+            return nil
+        }
+        while low != high {
+            let mid = index(low, offsetBy: distance(from: low, to: high)/2)
+            if predicate(self[mid]) {
+                low = index(after: mid)
+            } else {
+                high = mid
+            }
+        }
+        return low
+    }
+}
+
 func impurity(data : DataSet, forClassValue: Int) -> Double {
     var numOther : Double = 0
     for p in 0..<data.instances.count {
@@ -50,7 +69,7 @@ func findAllRules(forClassValue : Int, data : DataSet) -> [AxisSelectionRule]? {
             let att = data.getAttributes()[index]
             if let attMin = att.min, let attMax = att.max {
                 let tolerance = (attMax - attMin)/1000.0
-                if(abs(r.min - attMin) < tolerance && abs(r.max - attMax) < tolerance) {
+                if(attMin == attMax || (abs(r.min - attMin) < tolerance && abs(r.max - attMax) < tolerance)) {
                     return nil
                 }
             }
@@ -71,34 +90,21 @@ func correctDecisionBoundaries(forRule rule : Rule, data : DataSet) -> Rule {
         var result : [AxisSelectionRule] = []
         for s in selections {
             let _ = data.sortOnAttribute(attribute: s.axisIndex)
-            var index = 0
             var newMin : Double? = nil
             var newMax : Double? = nil
-            if let min = s.rangeMin {
-                while(data.instances[index].values[s.axisIndex] ?? Double.infinity < min) {
-                    index += 1
-                    if(index >= data.instances.count) {
-                        index -= 1
-                        break
-                    }
-                }
-                if let v = data.instances[index].values[s.axisIndex], v < min {
-                    newMin = v+(v+min)/2.0
-                }
+            if let min = s.rangeMin,
+                let index = data.instances.binarySearch(predicate: {$0.values[s.axisIndex] ?? Double.infinity < min}),
+                let v = data.instances[index-1].values[s.axisIndex] {
+                    newMin = v+(min-v)/2.0
             }
-            if let max = s.rangeMax {
-                while(index < data.instances.count && !(data.instances[index].values[s.axisIndex] ?? Double.infinity > max)) {
-                    index += 1
-                    if(index >= data.instances.count) {
-                        index -= 1
-                        break
-                    }
-                }
-                if let v = data.instances[index].values[s.axisIndex], v > max {
-                    newMax = v+(v+max)/2.0
-                }
+            if let max = s.rangeMax,
+                let index = data.instances.binarySearch(predicate: {$0.values[s.axisIndex] ?? Double.infinity <= max}), index != data.instances.startIndex,
+                let v = data.instances[index].values[s.axisIndex] {
+                newMax = max+(v-max)/2.0
             }
-            result.append(AxisSelectionRule(rangeMin: newMin, rangeMax: newMax, axisIndex: s.axisIndex))
+            if(newMin != nil || newMax != nil) {
+                result.append(AxisSelectionRule(rangeMin: newMin, rangeMax: newMax, axisIndex: s.axisIndex))
+            }
         }
         return Rule.AxisSelection(result)
     default:
@@ -121,7 +127,7 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
     for c in combinations {
         let r = Rule.AxisSelection(c)
         if(impurity(data: data, rule: r, forClassValue: forClassValue) - 0.1 < smallestNumOther) {
-            return r
+            return correctDecisionBoundaries(forRule: r, data: data)
         }
     }
     return correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)
@@ -130,7 +136,11 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
 public func findBestCavity(data : DataSet) -> Rule? {
     var lowestNumOther : Double? = nil
     var bestClass : Int? = nil
+    let dist = distribution(data: data)
     for c in data.classes {
+        guard let count = dist[c.value], count >= 2 else {
+            continue
+        }
         if let allRules = findAllRules(forClassValue: c.value, data: data) {
             let numOther = impurity(data: data, rule: Rule.AxisSelection(allRules), forClassValue: c.value)
             if(lowestNumOther == nil || lowestNumOther! > numOther) {

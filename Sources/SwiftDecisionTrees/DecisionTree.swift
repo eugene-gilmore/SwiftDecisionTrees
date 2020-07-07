@@ -2311,6 +2311,9 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
         node.insideChildRule?.parent = node
         node.outsideChildRule?.parent = node
     }
+    else {
+        insideInstances = insideRules(data: data, rules: rulesForNode(n: node.insideChildRule!))
+    }
     
     finishSubTree(node: node.insideChildRule!, data: insideInstances!, fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
     finishSubTree(node: node.outsideChildRule!, data: insideRules(data: data, rules: rulesForNode(n: node.outsideChildRule!)), fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
