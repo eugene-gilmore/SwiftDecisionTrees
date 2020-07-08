@@ -4,7 +4,8 @@ import PackageDescription
 let package = Package(
 	name: "SwiftDecisionTrees",
 	products: [
-		.library(name: "SwiftDecisionTrees", targets: ["SwiftDecisionTrees"])
+		.library(name: "SwiftDecisionTrees", targets: ["SwiftDecisionTrees"]),
+		.executable(name: "DecisionTreeDemo", targets: ["DecisionTreeDemo"])
 	],
 	dependencies: [
 		.package(url: "https://github.com/IBM-Swift/BlueSignals.git", .branch("master")),

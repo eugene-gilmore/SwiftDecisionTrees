@@ -63,7 +63,7 @@ func impurityBits(data: DataSet, rule: Rule, forClassValue: Int) -> [Int64] {
         if(data.instances[p].classVal != forClassValue) {
             let inside = insideRule(instance: data.instances[p], data: data, rule: rule)
             if(inside == nil || inside == true) {
-                result[p/64] = result[p/64] | (1 << p%64)
+                result[p/64] = result[p/64] | (Int64(1) << (p%64))
             }
         }
     }
@@ -162,12 +162,13 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
     return correctDecisionBoundaries(forRule: Rule.AxisSelection(combination.rule), data: data)
 
 
-    /*var combinations = allRules.combinations.sorted {$0.count < $1.count }
+    /*var combinations = allRulesImpurity.combinations.sorted {$0.count < $1.count }
     combinations.removeFirst()
     combinations.removeLast()
     for c in combinations {
-        let r = Rule.AxisSelection(c)
-        if(impurity(data: data, rule: r, forClassValue: forClassValue) - 0.1 < smallestNumOther) {
+        let impurity = c.reduce(c[0].impurityBits, {$0 & $1.impurityBits})
+        if(impurity.nonzeroBitCount <= smallestNumOther) {
+            let r = Rule.AxisSelection(c.map {$0.rule})
             return correctDecisionBoundaries(forRule: r, data: data)
         }
     }
@@ -197,7 +198,7 @@ public func findBestCavity(data : DataSet) -> Rule? {
 }
 
 public func findBestCavityC45(data : DataSet) -> Rule? {
-    let c45 = findBestSplit(data: data, twoValueSplit: true, j48Mode: true)
+    let c45 = findBestSplit(data: data, twoValueSplit: false, j48Mode: true)
     if let cavity = findBestCavity(data: data) {
         let cavityGainRatio = gainRatio(distribution: Distribution(dataset: data, rule: cavity))
         if let c45Rule = c45.rule {
