@@ -2292,7 +2292,7 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                 var hc = HillClimberSplit(dataset: data, mode: .RoundRobinImprovement)
                 node.rules = hc.getRule()
             case .NC:
-                node.rules = findBestCavity(data: data)
+                node.rules = findBestCavity(data: data)?.rule
             case .NCC45:
                 node.rules = findBestCavityC45(data: data)
             case .OC1:
