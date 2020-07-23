@@ -157,6 +157,8 @@ func correctDecisionBoundaries(forRule rule : Rule, data : DataSet) -> Rule {
     }
 }
 
+public var ruleDiffs: [Int?] = []
+
 public func findNextCavity(forClassValue : Int, data : DataSet) -> NCResult? {
     
     guard let allRules = findAllRules(forClassValue: forClassValue, data: data) else {
@@ -168,6 +170,24 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> NCResult? {
     var allRulesImpurity = allRules.map { r in 
         return (rule : r, impurityBits: impurityBits(data: data, rule: Rule.AxisSelection([r]), forClassValue: forClassValue))
     }.sorted {$0.impurityBits.nonzeroBitCount < $1.impurityBits.nonzeroBitCount}
+
+
+    /*var combinations = allRulesImpurity.combinations.sorted {$0.count < $1.count }
+    combinations.removeFirst()
+    combinations.removeLast()
+    var allComboRule : Rule? = nil
+    for c in combinations {
+        let impurity = c.reduce(c[0].impurityBits, {$0 & $1.impurityBits})
+        if(impurity.nonzeroBitCount <= smallestNumOther) {
+            let r = Rule.AxisSelection(c.map {$0.rule})
+            allComboRule = correctDecisionBoundaries(forRule: r, data: data)
+            break
+        }
+    }
+    if(allComboRule == nil) {
+        allComboRule = correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)
+    }
+    //return correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)*/
     
     let first = allRulesImpurity.removeFirst()
     var combination : (rule: [AxisSelectionRule], impurityBits: [Int64]) = ([first.rule], first.impurityBits)
@@ -188,20 +208,34 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> NCResult? {
         combination.impurityBits = combination.impurityBits & next.impurityBits
         combinationHistory.append((rule: combination.rule, impurity: combination.impurityBits.nonzeroBitCount))
     }
-    return NCResult(rule: correctDecisionBoundaries(forRule: Rule.AxisSelection(combination.rule), data: data), combinationHistory: combinationHistory)
 
-
-    /*var combinations = allRulesImpurity.combinations.sorted {$0.count < $1.count }
-    combinations.removeFirst()
-    combinations.removeLast()
-    for c in combinations {
-        let impurity = c.reduce(c[0].impurityBits, {$0 & $1.impurityBits})
-        if(impurity.nonzeroBitCount <= smallestNumOther) {
-            let r = Rule.AxisSelection(c.map {$0.rule})
-            return correctDecisionBoundaries(forRule: r, data: data)
-        }
+    //compare methods
+    /*let addionMethodRule = correctDecisionBoundaries(forRule: Rule.AxisSelection(combination.rule), data: data)
+    var setA : Set<Int> = []
+    var setB : Set<Int> = []
+    switch allComboRule {
+    case let .AxisSelection(axisSelection):
+        setA = Set(axisSelection.map {$0.axisIndex})
+    default:
+        break
     }
-    return correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)*/
+
+    switch addionMethodRule {
+    case let .AxisSelection(axisSelection):
+        setB = Set(axisSelection.map {$0.axisIndex})
+    default:
+        break
+    }
+    let diff = setA.symmetricDifference(setB)
+    if(diff.count == 0) {
+        ruleDiffs.append(nil)
+    }
+    else {
+        ruleDiffs.append(setB.count - setA.count)
+    }*/
+
+    return NCResult(rule: correctDecisionBoundaries(forRule: Rule.AxisSelection(combination.rule), data: data), combinationHistory: combinationHistory)
+    //return NCResult(rule: allComboRule!, combinationHistory: combinationHistory)
 }
 
 public func findBestCavity(data : DataSet) -> NCResult? {

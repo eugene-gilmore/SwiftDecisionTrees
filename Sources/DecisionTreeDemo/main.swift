@@ -195,6 +195,41 @@ func evaluateSize() {
     }
 }
 
+func NCTest() {
+    var numEqiv = 0
+    var numSameSize = 0
+    var numBigger = 0
+    for d in datasets {
+        guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
+            print("couldn't load file \(datasetLocation+d+".csv")")
+            continue
+        }
+        ruleDiffs = []
+        
+            let tree = TreeNode()
+            finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: buildMethod)
+        let e = ruleDiffs.filter {$0 == nil}.count
+        let s = ruleDiffs.filter {
+            if let e = $0, e == 0 {return true}
+            return false
+        }.count
+        let b = ruleDiffs.filter {
+            if let e = $0, e > 0 {
+                return true
+            }
+            return false
+        }
+        print("""
+        \(d)\t\t\tEquiv:\t\(e)\tSame Size: \(s)\tBigger: \(b.count)\tBiggerAvgDiff: 
+        \(b.count != 0 ? String(Double(b.reduce(0,{$0 + $1!}))/Double(b.count)) : "-" )
+        """)
+        numEqiv += e
+        numSameSize += s
+        numBigger += b.count
+    }
+}
+
+//NCTest()
 //evaluateSize()
 //exit(0)
 
@@ -208,7 +243,7 @@ for d in datasets {
     var accuracy: [Double] = []
     var treeSize : [Double] = []
     var deepestLeaf : [Double] = []
-    var resultStr = "\tFMeasure\tTreeSize\tDeepestLeaf\n"
+    var resultStr = "\tFMeasure\tAccuracy\tTreeSize\tDeepestLeaf\n"
     func resultString(run: Int?, fMeasure: Double, accuracy: Double, treeSize: Double, deepestLeaf: Double) -> String {
         return "\(run != nil ? "Run \(run!+1)" : "Average")\t\(String(format: "%.2f",fMeasure))\t\t\(String(format: "%.2f", accuracy))\t\t\(String(format: "%.2f",treeSize))\t\t\(String(format: "%.2f",deepestLeaf))\n"
     }
