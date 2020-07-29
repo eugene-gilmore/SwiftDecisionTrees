@@ -118,7 +118,7 @@ func findAllRules(forClassValue : Int, data : DataSet) -> [AxisSelectionRule]? {
                     return nil
                 }
             }
-            return AxisSelectionRule(rangeMin: r.min, rangeMax: r.max, axisIndex: index)
+            return AxisSelectionRule(rangeMin: r.min, rangeMax: r.max, axisIndex: index, missingValueBehaviour: .Include)
         }
         return nil
     }).compactMap{$0}
@@ -148,7 +148,7 @@ func correctDecisionBoundaries(forRule rule : Rule, data : DataSet) -> Rule {
                 newMax = max+(v-max)/2.0
             }
             if(newMin != nil || newMax != nil) {
-                result.append(AxisSelectionRule(rangeMin: newMin, rangeMax: newMax, axisIndex: s.axisIndex))
+                result.append(AxisSelectionRule(rangeMin: newMin, rangeMax: newMax, axisIndex: s.axisIndex, missingValueBehaviour: .Include))
             }
         }
         return Rule.AxisSelection(result)

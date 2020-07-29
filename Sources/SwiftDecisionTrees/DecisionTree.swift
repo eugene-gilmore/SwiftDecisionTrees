@@ -575,14 +575,41 @@ public func loadFromFile(file: String, sep: Character = ",", headingsPresent : B
     return data
 }
 
+public enum MissingValueBehaviour : JSONCodable {
+    public init(object: JSONObject) throws {
+        let decoder = JSONDecoder(object: object)
+        self = try decoder.decode("behaviour")
+    }
+
+    public func toJSON() throws -> Any {
+        return try JSONEncoder.create { (encoder) -> Void in
+            switch self {
+            case .Weigted:
+                try encoder.encode(0, key: "behaviour")
+            case .Include:
+                try encoder.encode(1, key: "behaviour")
+            case .Exclude:
+                try encoder.encode(2, key: "behaviour")
+            }
+        }
+    }
+
+    case Weigted
+    case Include
+    case Exclude
+}
+
 public class AxisSelectionRule : JSONCodable {
 	public var rangeMin : Double?
 	public var rangeMax : Double?
 	public var axisIndex : Int
-	public init(rangeMin : Double?, rangeMax : Double?, axisIndex : Int) {
+    public var missingValueBehaviour : MissingValueBehaviour
+	public init(rangeMin : Double?, rangeMax : Double?, axisIndex : Int, 
+    missingValueBehaviour : MissingValueBehaviour = .Weigted) {
 		self.rangeMin = rangeMin
 		self.rangeMax = rangeMax
 		self.axisIndex = axisIndex
+        self.missingValueBehaviour = missingValueBehaviour
 	}
 	
 	public required init(object: JSONObject) throws {
@@ -590,6 +617,12 @@ public class AxisSelectionRule : JSONCodable {
 		rangeMin = try decoder.decode("rangeMin")
 		rangeMax = try decoder.decode("rangeMax")
 		axisIndex = try decoder.decode("axisIndex")
+        do {
+            missingValueBehaviour = try decoder.decode("missingValueBehaviour")
+        }
+        catch {
+            missingValueBehaviour = .Weigted
+        }
 	}
 }
 
@@ -897,7 +930,15 @@ public func insideRule(instance : Point, data : DataSet, rule : Rule) -> Bool? {
 	case let .AxisSelection(selection):
 		for a in selection {
             guard let v = instance.values[a.axisIndex] else {
-                return nil
+                switch a.missingValueBehaviour {
+                case .Weigted:
+                    return nil
+                case .Exclude:
+                    return false
+                case .Include:
+                    break    
+                }
+                continue
             }
             if(a.rangeMin != nil && v < a.rangeMin!) {
                 return false
