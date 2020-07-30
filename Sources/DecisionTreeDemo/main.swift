@@ -163,7 +163,7 @@ func debug() {
 
 func printDatasetStatsLatex() {
     print("Dataset & Attributes & Instances & Classes & \\% Missing Values & \\% Instances of Most Frequent Class \\% Instances of Most Frequent Class \\\\")
-    for d in datasets.sorted(by: { $0.lowercased() < $1.lowercased() }) {
+    for d in datasets.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }) {
         guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
             print("couldn't load file \(datasetLocation+d+".csv")")
             continue
