@@ -538,7 +538,7 @@ public func loadFromFile(file: String, sep: Character = ",", headingsPresent : B
     return data
 }
 
-public class AxisSelectionRule : JSONCodable {
+public class AxisSelectionRule : JSONCodable, Codable {
 	public var rangeMin : Double?
 	public var rangeMax : Double?
 	public var axisIndex : Int
@@ -556,7 +556,7 @@ public class AxisSelectionRule : JSONCodable {
 	}
 }
 
-public class HyperPlaneRule : JSONCodable {
+public class HyperPlaneRule : JSONCodable, Codable {
     public required init(object: JSONObject) throws {
         let decoder = JSONDecoder(object: object)
         coefficients = try decoder.decode("coefficients")
@@ -572,7 +572,7 @@ public class HyperPlaneRule : JSONCodable {
 
 public typealias PathToNode = [(rule : Rule, invert : Bool)]
 
-public protocol Shape : JSONCodable {
+public protocol Shape : JSONCodable, Codable {
 }
 
 public class Rectangle : Shape {
@@ -611,19 +611,28 @@ public class Rectangle : Shape {
 	}
 }
 
+public class Point2D : Codable {
+    public var x : Double
+    public var y : Double
+
+    init(x : Double, y : Double) {
+        self.x = x
+        self.y = y
+    }
+}
+
 public class Circle : Shape {
     public required init(object: JSONObject) throws {
         let decoder = JSONDecoder(object: object)
-        center.x = try decoder.decode("centerX")
-        center.y = try decoder.decode("centerY")
+        center = Point2D(x: try decoder.decode("centerX"), y: try decoder.decode("centerY"))
         radius = try decoder.decode("radius")
     }
     
-    public var center : (x : Double, y : Double)
+    public var center : Point2D
     public var radius : Double
     
     public init(center : (x : Double, y : Double), radius : Double) {
-        self.center = center
+        self.center = Point2D(x: center.x, y: center.y)
         self.radius = radius
     }
     
@@ -642,7 +651,7 @@ public class Circle : Shape {
     
 }
 
-public class RegionRule : JSONCodable {
+public class RegionRule : JSONCodable, Codable {
 	public var Attributes : [Int] = []
 	public var Region : Shape
 	
@@ -665,6 +674,27 @@ public class RegionRule : JSONCodable {
 		self.Region = region
 		self.Attributes = attributes
 	}
+
+    enum CodingKeys: CodingKey {
+        case Attributes, Region
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Attributes, forKey: .Attributes)
+        try Region.encode(to: encoder)
+    }
+
+    public required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        Attributes = try container.decode([Int].self, forKey: .Attributes)
+        if let rec =  try? container.decode(Rectangle.self, forKey: .Region) {
+            Region = rec
+        }
+        else {
+            Region = try container.decode(Circle.self, forKey: .Region)
+        }
+    }
 }
 
 public class PCRegionRule : RegionRule {
@@ -696,16 +726,81 @@ public class PCRegionRule : RegionRule {
 		axisMax = []
 		super.init()
 	}
+
+    enum CodingKeys: CodingKey {
+        case axisSeperation, axisMin, axisMax, AttributeFlipped
+    }
+
+	public required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        axisSeperation = try container.decode(Double.self, forKey: .axisSeperation)
+        axisMin = try container.decode([Double].self, forKey: .axisMin)
+        axisMax = try container.decode([Double].self, forKey: .axisMax)
+        AttributeFlipped = try container.decode([Bool].self, forKey: .AttributeFlipped)
+	    try super.init(from: decoder)
+	}
+
+    public override func encode(to encoder: Encoder) throws {
+        try super.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(axisSeperation, forKey: .axisSeperation)
+        try container.encode(axisMin, forKey: .axisMin)
+        try container.encode(axisMax, forKey: .axisMax)
+        try container.encode(AttributeFlipped, forKey: .AttributeFlipped)
+    }
 }
 
-public enum Rule {
+public enum Rule : Codable {
 	case AxisSelection([AxisSelectionRule])
 	case Region([RegionRule])
 	case PCRegion([PCRegionRule])
     case HyperPlane(HyperPlaneRule)
+
+    enum CodingKeys: CodingKey {
+        case AxisSelection,Region,PCRegion,HyperPlane
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+            case let .AxisSelection(s):
+                try container.encode(s, forKey: .AxisSelection)
+            case let .Region(s):
+                try container.encode(s, forKey: .Region)
+            case let .PCRegion(s):
+                try container.encode(s, forKey: .PCRegion)
+            case let .HyperPlane(s):
+                try container.encode(s, forKey: .HyperPlane)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let key = container.allKeys.first
+
+        switch key {
+        case .AxisSelection:
+            self = .AxisSelection(try container.decode([AxisSelectionRule].self, forKey: .AxisSelection))
+        case .Region:
+            self = .Region(try container.decode([RegionRule].self, forKey: .Region))
+        case .PCRegion:
+            self = .PCRegion(try container.decode([PCRegionRule].self, forKey: .PCRegion))
+        case .HyperPlane:
+            self = .HyperPlane(try container.decode(HyperPlaneRule.self, forKey: .HyperPlane))
+        default:
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: "Unabled to decode Rule enum"
+                )
+            )
+        }
+    }
+
 }
 
-public class TreeNode : JSONCodable {
+public class TreeNode : JSONCodable, Codable {
 	public var parent : TreeNode?
 	public var insideChildRule : TreeNode?
 	public var outsideChildRule : TreeNode?
