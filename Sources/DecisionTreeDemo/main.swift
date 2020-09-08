@@ -2,7 +2,8 @@ import SwiftDecisionTrees
 import Foundation
 import Signals
 
-let datasetLocation = "/home/eugene/PHD/Datasets/"
+let home = NSHomeDirectory()
+let datasetLocation = home + "/PHD/Datasets/"
 let resultsLocation = datasetLocation+"results/nc/"
 let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere",
     "ClimateSimulationCrashes", "leaf", "chronic_kidney_disease", "BreastTissue", "transfusion"]
@@ -161,18 +162,18 @@ func debug() {
 }
 
 func printDatasetStatsLatex() {
-    print("Dataset & Attributes & Instances & Classes \\\\")
-    for d in datasets {
+    print("Dataset & Attributes & Instances & Classes & \\% Missing Values & \\% Instances of Most Frequent Class \\% Instances of Most Frequent Class \\\\")
+    for d in datasets.sorted(by: { $0.lowercased() < $1.lowercased() }) {
         guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
             print("couldn't load file \(datasetLocation+d+".csv")")
             continue
         }
-        print("\(d) & \(data.attributes.count) & \(data.instances.count) & \(data.classes.count)\\\\")
+        print("\(d) & \(data.attributes.count) & \(data.instances.count) & \(data.classes.count) & \(String(format: "%.2f", data.amountMissingValues()*100)) & \(String(format: "%.2f", data.amountMostFreqClass()*100)) & \(String(format: "%.2f", data.amountLeastFreqClass()*100)) \\\\ \\hline")
     }
 }
 
 //printDatasetStatsLatex()
-
+//exit(0)
 //debug()
 
 //processWeka(directory: resultsLocation+"../j48/")

@@ -293,6 +293,28 @@ public class DataSet {
         return result
     }
     
+    public func amountMissingValues() -> Double {
+        var missing = 0
+        for i in instances {
+            for v in i.values {
+                if(v == nil) {
+                    missing += 1
+                }
+            }
+        }
+        return Double(missing)/Double(instances.count * numAttributes())
+    }
+    
+    public func amountMostFreqClass() -> Double {
+        let dist = distribution(data: self)
+        return dist.max {$0.value < $1.value}!.value / Double(instances.count)
+    }
+    
+    public func amountLeastFreqClass() -> Double {
+        let dist = distribution(data: self)
+        return dist.min {$0.value < $1.value}!.value / Double(instances.count)
+    }
+    
     public func sortOnAttribute(attribute a: Int) -> Int{
         var numMissing = 0
         instances.sort(by: {(p1 : Point, p2 : Point) -> Bool in
