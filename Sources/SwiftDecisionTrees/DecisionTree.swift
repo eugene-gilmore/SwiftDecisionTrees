@@ -2264,8 +2264,8 @@ public func testClassifier(points : [Point], dataset : DataSet, classifier : Tre
     return correct/Double(points.count)
 }
 
-public enum BuildMethod {
-    case C45
+public enum BuildMethod: String, CaseIterable{
+    case C45 
     case DE
     case HCF
     case HCB

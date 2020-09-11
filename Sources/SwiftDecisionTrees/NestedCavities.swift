@@ -261,7 +261,7 @@ public func findBestCavity(data : DataSet) -> NCResult? {
 }
 
 public func findBestCavityC45(data : DataSet) -> Rule? {
-    let c45 = findBestSplit(data: data, twoValueSplit: false, j48Mode: true)
+    let c45 = findBestSplit(data: data)
     if let cavity = findBestCavity(data: data)?.rule {
         let cavityGainRatio = gainRatio(distribution: Distribution(dataset: data, rule: cavity))
         if let c45Rule = c45.rule {

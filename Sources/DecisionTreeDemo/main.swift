@@ -4,11 +4,11 @@ import Signals
 
 let home = NSHomeDirectory()
 let datasetLocation = home + "/PHD/Datasets/"
-let resultsLocation = datasetLocation+"results/nc/"
+var resultsLocation = datasetLocation+"results/fullv1/"
 let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere",
     "ClimateSimulationCrashes", "leaf", "chronic_kidney_disease", "BreastTissue", "transfusion"]
 let NUM_RUNS = 5
-let buildMethod = BuildMethod.NC
+var buildMethod = BuildMethod.NC
 
 //taken from https://stackoverflow.com/questions/49470358/how-can-i-return-a-float-or-double-from-normal-distribution-in-swift-4
 class MyGaussianDistribution {
@@ -234,49 +234,69 @@ func NCTest() {
 //evaluateSize()
 //exit(0)
 
-for d in datasets {
-    guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
-        print("couldn't load file \(datasetLocation+d+".csv")")
-        continue
-    }
-    print("loaded: \(datasetLocation+d+".csv")")
-    var fMeasure : [Double] = []
-    var accuracy: [Double] = []
-    var treeSize : [Double] = []
-    var deepestLeaf : [Double] = []
-    var resultStr = "\tFMeasure\tAccuracy\tTreeSize\tDeepestLeaf\n"
-    func resultString(run: Int?, fMeasure: Double, accuracy: Double, treeSize: Double, deepestLeaf: Double) -> String {
-        return "\(run != nil ? "Run \(run!+1)" : "Average")\t\(String(format: "%.2f",fMeasure))\t\t\(String(format: "%.2f", accuracy))\t\t\(String(format: "%.2f",treeSize))\t\t\(String(format: "%.2f",deepestLeaf))\n"
-    }
-    func average(a : [Double]) -> Double {
-        return a.reduce(0.0, {$0 + $1})/Double(a.count)
-    }
-    for i in 0..<NUM_RUNS {
-        let start = Date().timeIntervalSince1970
-        let result = crossValidation(data: data, buildMethod: buildMethod, progress: progress, runParallel: false)
-        var aggregateResult = Result()
-        aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
-        for r in 0..<result.count {
-            result[r].tree.saveToFile(filename: resultsLocation+d+"-Run\(i+1)-Tree\(r)")
-            result[r].saveToFile(filename: resultsLocation+d+"-Run\(i+1)-Result\(r)")
-            for i in 0..<data.classes.count {
-                for j in 0..<data.classes.count {
-                    aggregateResult.confusionMatrix[i][j] += result[r].confusionMatrix[i][j]
+func test() {
+    for d in datasets {
+        guard let data = loadFromFile(file: datasetLocation+d+".csv", headingsPresent: false) else {
+            print("couldn't load file \(datasetLocation+d+".csv")")
+            continue
+        }
+        print("loaded: \(datasetLocation+d+".csv")")
+        var fMeasure : [Double] = []
+        var accuracy: [Double] = []
+        var treeSize : [Double] = []
+        var deepestLeaf : [Double] = []
+        var resultStr = "\tFMeasure\tAccuracy\tTreeSize\tDeepestLeaf\n"
+        func resultString(run: Int?, fMeasure: Double, accuracy: Double, treeSize: Double, deepestLeaf: Double) -> String {
+            return "\(run != nil ? "Run \(run!+1)" : "Average")\t\(String(format: "%.2f",fMeasure))\t\t\(String(format: "%.2f", accuracy))\t\t\(String(format: "%.2f",treeSize))\t\t\(String(format: "%.2f",deepestLeaf))\n"
+        }
+        func average(a : [Double]) -> Double {
+            return a.reduce(0.0, {$0 + $1})/Double(a.count)
+        }
+        for i in 0..<NUM_RUNS {
+            let start = Date().timeIntervalSince1970
+            let result = crossValidation(data: data, buildMethod: buildMethod, progress: progress, runParallel: false)
+            var aggregateResult = Result()
+            aggregateResult.confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
+            for r in 0..<result.count {
+                result[r].tree.saveToFile(filename: resultsLocation+"/"+d+"-Run\(i+1)-Tree\(r)")
+                result[r].saveToFile(filename: resultsLocation+"/"+d+"-Run\(i+1)-Result\(r)")
+                for i in 0..<data.classes.count {
+                    for j in 0..<data.classes.count {
+                        aggregateResult.confusionMatrix[i][j] += result[r].confusionMatrix[i][j]
+                    }
                 }
             }
+            fMeasure.append(aggregateResult.macroFMeasureV2())
+            accuracy.append(aggregateResult.accuracy())
+            treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
+            deepestLeaf.append(average(a: result.map {Double($0.tree.deepestLeaf())}))
+            resultStr += resultString(run: i, fMeasure: fMeasure.last!, accuracy: accuracy.last!, treeSize: treeSize.last!, deepestLeaf: deepestLeaf.last!)
+            print("Run \(i+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", (Date().timeIntervalSince1970-start)))s)")
         }
-        fMeasure.append(aggregateResult.macroFMeasureV2())
-        accuracy.append(aggregateResult.accuracy())
-        treeSize.append(average(a: result.map {Double($0.tree.sizeOfTree())}))
-        deepestLeaf.append(average(a: result.map {Double($0.tree.deepestLeaf())}))
-        resultStr += resultString(run: i, fMeasure: fMeasure.last!, accuracy: accuracy.last!, treeSize: treeSize.last!, deepestLeaf: deepestLeaf.last!)
-        print("Run \(i+1)/\(NUM_RUNS) Complete(\(String(format: "%.1f", (Date().timeIntervalSince1970-start)))s)")
-    }
-    resultStr += resultString(run: nil, fMeasure: average(a: fMeasure), accuracy: average(a: accuracy), treeSize: average(a: treeSize), deepestLeaf: average(a: deepestLeaf))
-    do {
-        try resultStr.write(toFile: resultsLocation+d+"-results.txt", atomically: false, encoding: .utf8)
-    }
-    catch {
-        print("Error writting results to file")
+        resultStr += resultString(run: nil, fMeasure: average(a: fMeasure), accuracy: average(a: accuracy), treeSize: average(a: treeSize), deepestLeaf: average(a: deepestLeaf))
+        do {
+            try resultStr.write(toFile: resultsLocation+"/"+d+"-results.txt", atomically: false, encoding: .utf8)
+        }
+        catch {
+            print("Error writting results to file")
+        }
     }
 }
+
+//test()
+//exit(0)
+
+func testAll() {
+    let resDir = resultsLocation
+    for b in [BuildMethod.C45, BuildMethod.DE, BuildMethod.NCC45] {
+        resultsLocation = resDir + "/\(b.rawValue)"
+        if !FileManager.default.fileExists(atPath: resultsLocation) {
+            try! FileManager.default.createDirectory(atPath: resultsLocation, withIntermediateDirectories: true)
+        }
+        buildMethod = b
+        print("Running Datasets for \(b) algorithm")
+        test()
+    }
+}
+
+testAll()
