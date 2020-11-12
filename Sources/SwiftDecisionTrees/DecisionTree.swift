@@ -500,13 +500,16 @@ public func loadFromFile(file: String, sep: Character = ",", headingsPresent : B
     let l: [Substring] = f[0].split(separator: sep, omittingEmptySubsequences : false)
     let numValues = l.count
     let classVal = lastIsClass ? Int(String(l.last!)) : 0
+    var attNum = 0
     for x in (lastIsClass ? l.dropLast() : ArraySlice<Substring>(l)) {
         if(headingsPresent) {
             data.addAttribute(name: String(x))
         }
         else {
             data.addAttribute(name: "")
+            //data.addAttribute(name: "att \(attNum)")
         }
+        attNum += 1
     }
     
     if(lastIsClass && headingsPresent) {
@@ -808,6 +811,7 @@ public class TreeNode : JSONCodable, Codable {
 	public var rules : Rule?
     public var ruleGenerated : Bool
 	public var creationTime : String?
+    public var gainRatio : Double?
 	
 	public func isLeaf() -> Bool{
 		return classVal != nil && !hasChildren()
@@ -886,6 +890,7 @@ public class TreeNode : JSONCodable, Codable {
 		else {
 			rules = nil
 		}
+        gainRatio = nil
 	}
 	
 	public init() {
@@ -900,6 +905,7 @@ public class TreeNode : JSONCodable, Codable {
 		formatter.dateStyle = .short
 		formatter.timeStyle = .full
 		creationTime = formatter.string(from: currentDateTime)
+        gainRatio = nil
 	}
 	
 	enum TreeNodeError : Error {
@@ -2281,8 +2287,21 @@ public func testClassifier(points : [Point], dataset : DataSet, classifier : Tre
     return correct/Double(points.count)
 }
 
-public enum BuildMethod {
-    case C45
+public func testClassifier(points : [Point], dataset : DataSet, classifier : TreeNode) -> Result{
+    var res = Result()
+    res.confusionMatrix = Array(repeating: Array(repeating: 0, count: dataset.classes.count), count: dataset.classes.count)
+    for p in points {
+        let real = dataset.getClassIndex(value: p.classVal)
+        let predict = dataset.getClassIndex(value: classifyPoint(point: p, dataset: dataset, classifier: classifier))
+        if let r = real, let p = predict {
+            res.confusionMatrix[p][r] += 1
+        }
+    }
+    return res
+}
+
+public enum BuildMethod: String, CaseIterable{
+    case C45 
     case DE
     case HCF
     case HCB
@@ -2391,6 +2410,7 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                     node.rules = nil
                     node.insideChildRule = nil
                 }
+                node.gainRatio = gainRatio(distribution: Distribution(dataset: data, rule: node.rules!))
             }
         }
         if(stop) {
@@ -2409,6 +2429,36 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
     
     finishSubTree(node: node.insideChildRule!, data: insideInstances!, fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
     finishSubTree(node: node.outsideChildRule!, data: insideRules(data: data, rules: rulesForNode(n: node.outsideChildRule!)), fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
+}
+
+public func avgGainRatioPerLevel(tree : TreeNode) -> [Double] {
+    var currentLevel = [tree]
+    var nextLevel : [TreeNode] = []
+    var result : [Double] = []
+    var level = 0
+    var nodesThisLevel = 0
+    while(!currentLevel.isEmpty) {
+        result.append(0)
+        for n in currentLevel {
+            if !n.isLeaf(), let gr = n.gainRatio {
+                result[level] = result[level] + gr
+                print(gr, terminator: " ")
+                nodesThisLevel = nodesThisLevel + 1
+            }
+            if let ic = n.insideChildRule, let oc = n.outsideChildRule {
+                nextLevel.append(contentsOf: [ic,oc])
+            }
+        }
+        print("")
+        if(nodesThisLevel > 0) {
+            result[level] =  result[level]/Double(nodesThisLevel)
+        }
+        currentLevel = nextLevel
+        nextLevel = []
+        level = level + 1
+        nodesThisLevel = 0
+    }
+    return result
 }
 
 public class CrossValidationProgress {
