@@ -260,6 +260,7 @@ func test() {
             for r in 0..<result.count {
                 result[r].tree.saveToFile(filename: resultsLocation+"/"+d+"-Run\(i+1)-Tree\(r)")
                 result[r].saveToFile(filename: resultsLocation+"/"+d+"-Run\(i+1)-Result\(r)")
+                result[r].testSet.saveAsCSV(file: resultsLocation+"/"+d+"-Run\(i+1)-TestSet\(r)")
                 for i in 0..<data.classes.count {
                     for j in 0..<data.classes.count {
                         aggregateResult.confusionMatrix[i][j] += result[r].confusionMatrix[i][j]

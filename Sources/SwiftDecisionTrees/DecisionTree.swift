@@ -27,11 +27,13 @@ public struct Result : JSONCodable {
         else {
             tree = TreeNode()
         }
+        testSet = DataSet()
     }
     
     public init() {
         confusionMatrix = []
         tree = TreeNode()
+        testSet = DataSet()
     }
     
     public func saveToFile(filename : String) {
@@ -59,6 +61,7 @@ public struct Result : JSONCodable {
     
     public var confusionMatrix : [[Int]] //[predicted][actual]
     public var tree : TreeNode
+    public var testSet : DataSet
     
     public func accuracy() -> Double {
         var numCorrect = 0
@@ -537,13 +540,16 @@ public func loadFromFile(file: String, sep: Character = ",", headingsPresent : B
     let l: [Substring] = f[0].split(separator: sep, omittingEmptySubsequences : false)
     let numValues = l.count
     let classVal = lastIsClass ? Int(String(l.last!)) : 0
+    var attNum = 0
     for x in (lastIsClass ? l.dropLast() : ArraySlice<Substring>(l)) {
         if(headingsPresent) {
             data.addAttribute(name: String(x))
         }
         else {
             data.addAttribute(name: "")
+            //data.addAttribute(name: "att \(attNum)")
         }
+        attNum += 1
     }
     
     if(lastIsClass && headingsPresent) {
@@ -575,7 +581,7 @@ public func loadFromFile(file: String, sep: Character = ",", headingsPresent : B
     return data
 }
 
-public enum MissingValueBehaviour : JSONCodable {
+public enum MissingValueBehaviour : JSONCodable, Codable {
     public init(object: JSONObject) throws {
         let decoder = JSONDecoder(object: object)
         self = try decoder.decode("behaviour")
@@ -595,11 +601,47 @@ public enum MissingValueBehaviour : JSONCodable {
     }
 
     case Weigted
-    case Include
+    case Include 
     case Exclude
+
+    enum CodingKeys: CodingKey {
+        case behaviour
+    }
+
+    enum CodingError: Error {
+        case unknownValue
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+            case .Weigted:
+                try container.encode(0, forKey: .behaviour)
+            case .Include:
+                try container.encode(1, forKey: .behaviour)
+            case .Exclude:
+                try container.encode(2, forKey: .behaviour)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let rawValue = try container.decode(Int.self, forKey: .behaviour)
+        switch rawValue {
+        case 0:
+            self = .Weigted
+        case 1:
+            self = .Include
+        case 2:
+            self = .Exclude
+        default:
+            throw CodingError.unknownValue
+        }
+    }
 }
 
-public class AxisSelectionRule : JSONCodable {
+public class AxisSelectionRule : JSONCodable, Codable {
 	public var rangeMin : Double?
 	public var rangeMax : Double?
 	public var axisIndex : Int
@@ -626,7 +668,7 @@ public class AxisSelectionRule : JSONCodable {
 	}
 }
 
-public class HyperPlaneRule : JSONCodable {
+public class HyperPlaneRule : JSONCodable, Codable {
     public required init(object: JSONObject) throws {
         let decoder = JSONDecoder(object: object)
         coefficients = try decoder.decode("coefficients")
@@ -642,7 +684,7 @@ public class HyperPlaneRule : JSONCodable {
 
 public typealias PathToNode = [(rule : Rule, invert : Bool)]
 
-public protocol Shape : JSONCodable {
+public protocol Shape : JSONCodable, Codable {
 }
 
 public class Rectangle : Shape {
@@ -681,19 +723,28 @@ public class Rectangle : Shape {
 	}
 }
 
+public class Point2D : Codable {
+    public var x : Double
+    public var y : Double
+
+    init(x : Double, y : Double) {
+        self.x = x
+        self.y = y
+    }
+}
+
 public class Circle : Shape {
     public required init(object: JSONObject) throws {
         let decoder = JSONDecoder(object: object)
-        center.x = try decoder.decode("centerX")
-        center.y = try decoder.decode("centerY")
+        center = Point2D(x: try decoder.decode("centerX"), y: try decoder.decode("centerY"))
         radius = try decoder.decode("radius")
     }
     
-    public var center : (x : Double, y : Double)
+    public var center : Point2D
     public var radius : Double
     
     public init(center : (x : Double, y : Double), radius : Double) {
-        self.center = center
+        self.center = Point2D(x: center.x, y: center.y)
         self.radius = radius
     }
     
@@ -712,7 +763,7 @@ public class Circle : Shape {
     
 }
 
-public class RegionRule : JSONCodable {
+public class RegionRule : JSONCodable, Codable {
 	public var Attributes : [Int] = []
 	public var Region : Shape
 	
@@ -735,6 +786,27 @@ public class RegionRule : JSONCodable {
 		self.Region = region
 		self.Attributes = attributes
 	}
+
+    enum CodingKeys: CodingKey {
+        case Attributes, Region
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(Attributes, forKey: .Attributes)
+        try Region.encode(to: encoder)
+    }
+
+    public required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        Attributes = try container.decode([Int].self, forKey: .Attributes)
+        if let rec =  try? container.decode(Rectangle.self, forKey: .Region) {
+            Region = rec
+        }
+        else {
+            Region = try container.decode(Circle.self, forKey: .Region)
+        }
+    }
 }
 
 public class PCRegionRule : RegionRule {
@@ -766,16 +838,81 @@ public class PCRegionRule : RegionRule {
 		axisMax = []
 		super.init()
 	}
+
+    enum CodingKeys: CodingKey {
+        case axisSeperation, axisMin, axisMax, AttributeFlipped
+    }
+
+	public required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        axisSeperation = try container.decode(Double.self, forKey: .axisSeperation)
+        axisMin = try container.decode([Double].self, forKey: .axisMin)
+        axisMax = try container.decode([Double].self, forKey: .axisMax)
+        AttributeFlipped = try container.decode([Bool].self, forKey: .AttributeFlipped)
+	    try super.init(from: decoder)
+	}
+
+    public override func encode(to encoder: Encoder) throws {
+        try super.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(axisSeperation, forKey: .axisSeperation)
+        try container.encode(axisMin, forKey: .axisMin)
+        try container.encode(axisMax, forKey: .axisMax)
+        try container.encode(AttributeFlipped, forKey: .AttributeFlipped)
+    }
 }
 
-public enum Rule {
+public enum Rule : Codable {
 	case AxisSelection([AxisSelectionRule])
 	case Region([RegionRule])
 	case PCRegion([PCRegionRule])
     case HyperPlane(HyperPlaneRule)
+
+    enum CodingKeys: CodingKey {
+        case AxisSelection,Region,PCRegion,HyperPlane
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+            case let .AxisSelection(s):
+                try container.encode(s, forKey: .AxisSelection)
+            case let .Region(s):
+                try container.encode(s, forKey: .Region)
+            case let .PCRegion(s):
+                try container.encode(s, forKey: .PCRegion)
+            case let .HyperPlane(s):
+                try container.encode(s, forKey: .HyperPlane)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let key = container.allKeys.first
+
+        switch key {
+        case .AxisSelection:
+            self = .AxisSelection(try container.decode([AxisSelectionRule].self, forKey: .AxisSelection))
+        case .Region:
+            self = .Region(try container.decode([RegionRule].self, forKey: .Region))
+        case .PCRegion:
+            self = .PCRegion(try container.decode([PCRegionRule].self, forKey: .PCRegion))
+        case .HyperPlane:
+            self = .HyperPlane(try container.decode(HyperPlaneRule.self, forKey: .HyperPlane))
+        default:
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: "Unabled to decode Rule enum"
+                )
+            )
+        }
+    }
+
 }
 
-public class TreeNode : JSONCodable {
+public class TreeNode : JSONCodable, Codable {
 	public var parent : TreeNode?
 	public var insideChildRule : TreeNode?
 	public var outsideChildRule : TreeNode?
@@ -783,6 +920,7 @@ public class TreeNode : JSONCodable {
 	public var rules : Rule?
     public var ruleGenerated : Bool
 	public var creationTime : String?
+    public var gainRatio : Double?
 	
 	public func isLeaf() -> Bool{
 		return classVal != nil && !hasChildren()
@@ -861,6 +999,7 @@ public class TreeNode : JSONCodable {
 		else {
 			rules = nil
 		}
+        gainRatio = nil
 	}
 	
 	public init() {
@@ -875,6 +1014,7 @@ public class TreeNode : JSONCodable {
 		formatter.dateStyle = .short
 		formatter.timeStyle = .full
 		creationTime = formatter.string(from: currentDateTime)
+        gainRatio = nil
 	}
 	
 	enum TreeNodeError : Error {
@@ -2264,6 +2404,19 @@ public func testClassifier(points : [Point], dataset : DataSet, classifier : Tre
     return correct/Double(points.count)
 }
 
+public func testClassifier(points : [Point], dataset : DataSet, classifier : TreeNode) -> Result{
+    var res = Result()
+    res.confusionMatrix = Array(repeating: Array(repeating: 0, count: dataset.classes.count), count: dataset.classes.count)
+    for p in points {
+        let real = dataset.getClassIndex(value: p.classVal)
+        let predict = dataset.getClassIndex(value: classifyPoint(point: p, dataset: dataset, classifier: classifier))
+        if let r = real, let p = predict {
+            res.confusionMatrix[p][r] += 1
+        }
+    }
+    return res
+}
+
 public enum BuildMethod: String, CaseIterable{
     case C45 
     case DE
@@ -2380,6 +2533,7 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                     node.rules = nil
                     node.insideChildRule = nil
                 }
+                node.gainRatio = gainRatio(distribution: Distribution(dataset: data, rule: node.rules!))
             }
         }
         if(stop) {
@@ -2401,6 +2555,36 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
     
     finishSubTree(node: node.insideChildRule!, data: insideInstances!, fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
     finishSubTree(node: node.outsideChildRule!, data: insideRules(data: data, rules: rulesForNode(n: node.outsideChildRule!)), fullTrainingSet: fullTrainingSet, buildMethod: buildMethod)
+}
+
+public func avgGainRatioPerLevel(tree : TreeNode) -> [Double] {
+    var currentLevel = [tree]
+    var nextLevel : [TreeNode] = []
+    var result : [Double] = []
+    var level = 0
+    var nodesThisLevel = 0
+    while(!currentLevel.isEmpty) {
+        result.append(0)
+        for n in currentLevel {
+            if !n.isLeaf(), let gr = n.gainRatio {
+                result[level] = result[level] + gr
+                print(gr, terminator: " ")
+                nodesThisLevel = nodesThisLevel + 1
+            }
+            if let ic = n.insideChildRule, let oc = n.outsideChildRule {
+                nextLevel.append(contentsOf: [ic,oc])
+            }
+        }
+        print("")
+        if(nodesThisLevel > 0) {
+            result[level] =  result[level]/Double(nodesThisLevel)
+        }
+        currentLevel = nextLevel
+        nextLevel = []
+        level = level + 1
+        nodesThisLevel = 0
+    }
+    return result
 }
 
 public class CrossValidationProgress {
@@ -2476,6 +2660,7 @@ public func crossValidation(data : DataSet, folds : Int = 10, buildMethod : Buil
             }
             finishSubTree(node: result[fold].tree, data: d, fullTrainingSet: d, buildMethod: buildMethod, progress: progress?.foldProgress)
             pruneNode(node: result[fold].tree, data: d)
+            result[fold].testSet = foldSets[fold]
         
         
             result[fold].confusionMatrix = Array(repeating: Array(repeating: 0, count: data.classes.count), count: data.classes.count)
