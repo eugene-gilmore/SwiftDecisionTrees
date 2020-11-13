@@ -194,6 +194,24 @@ public class Distribution {
         cachedSubsetWeight = Array(repeating: 0, count: numSubsets)
         cachedDefaultInfo = 0.0
     }
+
+    public convenience init(dataset: DataSet, rule : Rule) {
+        self.init(numSubsets: 2, numClasses: dataset.classes.count)
+        for p in 0..<dataset.instances.count {
+            if let inRule = insideRule(instance: dataset.instances[p], data: dataset, rule: rule) {
+                if(inRule) {
+                    subsets[0][dataset.instances[p].classIndex] += dataset.weights[p] ?? 1.0
+                }
+                else {
+                    subsets[1][dataset.instances[p].classIndex] += dataset.weights[p] ?? 1.0
+                }
+            }
+            else {
+                numMissing += dataset.weights[p] ?? 1.0
+            }
+        }
+        invalidateCache()
+    }
     
     public func invalidateCache() {
         cachedTotalWeight = nil
