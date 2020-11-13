@@ -1,3 +1,5 @@
+import Foundation
+
 func insideRule(data : DataSet, rule : Rule) -> DataSet {
     return insideRules(data: data, rules: [(rule: rule, invert: false)])
 }
@@ -6,6 +8,18 @@ extension Array {
     var combinations: [[Element]] {
         guard !isEmpty else { return [[]] }
         return Array(self[1...]).combinations.flatMap { [$0, [self[0]] + $0] }
+    }
+}
+
+extension Array where Iterator.Element: FixedWidthInteger {
+    var nonzeroBitCount: Int {
+        return self.reduce(0, {$0 + $1.nonzeroBitCount})
+    }
+    
+    static func &(lhs: [Iterator.Element], rhs: [Iterator.Element]) -> [Iterator.Element] {
+        return lhs.enumerated().map {(index,element) in 
+            return element & rhs[index]
+        }
     }
 }
 
@@ -28,19 +42,32 @@ extension RandomAccessCollection {
     }
 }
 
-func impurity(data : DataSet, forClassValue: Int) -> Double {
-    var numOther : Double = 0
+func impurity(data : DataSet, forClassValue: Int) -> Int {
+    var numOther : Int = 0
     for p in 0..<data.instances.count {
         if(data.instances[p].classVal != forClassValue) {
-            numOther += data.weights[p] ?? 1.0
+            numOther += 1
         }
     }
     return numOther
 }
 
-func impurity(data : DataSet, rule : Rule, forClassValue: Int) -> Double {
+func impurity(data : DataSet, rule : Rule, forClassValue: Int) -> Int {
     let inside = insideRule(data: data, rule: rule)
     return impurity(data: inside, forClassValue: forClassValue)
+}
+
+func impurityBits(data: DataSet, rule: Rule, forClassValue: Int) -> [Int64] {
+    var result = Array<Int64>(repeating: 0, count: Int(ceil(Double(data.instances.count)/64.0)))
+    for p in 0..<data.instances.count {
+        if(data.instances[p].classVal != forClassValue) {
+            let inside = insideRule(instance: data.instances[p], data: data, rule: rule)
+            if(inside == nil || inside == true) {
+                result[p/64] = result[p/64] | (1 << p%64)
+            }
+        }
+    }
+    return result
 }
 
 func findAllRules(forClassValue : Int, data : DataSet) -> [AxisSelectionRule]? {
@@ -120,8 +147,22 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
 
     let smallestNumOther = impurity(data: data, rule: Rule.AxisSelection(allRules), forClassValue: forClassValue)
 
+    var allRulesImpurity = allRules.map { r in 
+        return (rule : r, impurityBits: impurityBits(data: data, rule: Rule.AxisSelection([r]), forClassValue: forClassValue))
+    }.sorted {$0.impurityBits.nonzeroBitCount < $1.impurityBits.nonzeroBitCount}
+    
+    let first = allRulesImpurity.removeFirst()
+    var combination : (rule: [AxisSelectionRule], impurityBits: [Int64]) = ([first.rule], first.impurityBits) 
+    while(!allRulesImpurity.isEmpty && 
+    combination.impurityBits.nonzeroBitCount > smallestNumOther) {
+        let next = allRulesImpurity.removeFirst()
+        combination.rule.append(next.rule)
+        combination.impurityBits = combination.impurityBits & next.impurityBits
+    }
+    return correctDecisionBoundaries(forRule: Rule.AxisSelection(combination.rule), data: data)
 
-    var combinations = allRules.combinations.sorted {$0.count < $1.count }
+
+    /*var combinations = allRules.combinations.sorted {$0.count < $1.count }
     combinations.removeFirst()
     combinations.removeLast()
     for c in combinations {
@@ -130,11 +171,11 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> Rule? {
             return correctDecisionBoundaries(forRule: r, data: data)
         }
     }
-    return correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)
+    return correctDecisionBoundaries(forRule: Rule.AxisSelection(allRules), data: data)*/
 }
 
 public func findBestCavity(data : DataSet) -> Rule? {
-    var lowestNumOther : Double? = nil
+    var lowestNumOther : Int? = nil
     var bestClass : Int? = nil
     let dist = distribution(data: data)
     for c in data.classes {
@@ -153,4 +194,18 @@ public func findBestCavity(data : DataSet) -> Rule? {
         return findNextCavity(forClassValue: c, data: data)
     }
     return nil
+}
+
+public func findBestCavityC45(data : DataSet) -> Rule? {
+    let c45 = findBestSplit(data: data, twoValueSplit: true, j48Mode: true)
+    if let cavity = findBestCavity(data: data) {
+        let cavityGainRatio = gainRatio(distribution: Distribution(dataset: data, rule: cavity))
+        if let c45Rule = c45.rule {
+            if(c45.gainRatio > cavityGainRatio) {
+                return c45Rule
+            }
+        }
+        return cavity
+    }
+    return c45.rule
 }

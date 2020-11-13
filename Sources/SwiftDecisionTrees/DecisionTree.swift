@@ -2209,6 +2209,7 @@ public enum BuildMethod {
     case HCR
     case OC1
     case NC
+    case NCC45
 }
 
 public func buildOC1(data: DataSet) -> TreeNode {
@@ -2292,6 +2293,8 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                 node.rules = hc.getRule()
             case .NC:
                 node.rules = findBestCavity(data: data)
+            case .NCC45:
+                node.rules = findBestCavityC45(data: data)
             case .OC1:
                 let OC1Node = buildOC1(data: data)
                 node.rules = OC1Node.rules
