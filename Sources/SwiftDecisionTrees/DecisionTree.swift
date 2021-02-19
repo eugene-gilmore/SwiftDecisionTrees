@@ -2428,7 +2428,9 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                     node.rules = nil
                     node.insideChildRule = nil
                 }
-                node.gainRatio = gainRatio(distribution: Distribution(dataset: data, rule: node.rules!))
+                else {
+                    node.gainRatio = gainRatio(distribution: Distribution(dataset: data, rule: node.rules!))
+                }
             }
         }
         if(stop) {
