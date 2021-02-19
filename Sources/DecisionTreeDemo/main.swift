@@ -206,6 +206,8 @@ func NCTest() {
             continue
         }
         ruleDiffs = []
+        ruleDiffsPercent = []
+        ruleSizes = []
         
             let tree = TreeNode()
             finishSubTree(node: tree, data: data, fullTrainingSet: data, buildMethod: buildMethod)
@@ -221,8 +223,11 @@ func NCTest() {
             return false
         }
         print("""
-        \(d)\t\t\tEquiv:\t\(e)\tSame Size: \(s)\tBigger: \(b.count)\tBiggerAvgDiff: 
-        \(b.count != 0 ? String(Double(b.reduce(0,{$0 + $1!}))/Double(b.count)) : "-" )
+        \(d)\t\t\tEquiv:\t\(e)\tSame Size: \(s)\tBigger: \(b.count)\tBiggerAvgDiff: \
+        \(b.count != 0 ? String(Double(b.reduce(0,{$0 + $1!}))/Double(b.count)) : "-" ) \
+        \tBiggerSum: \(b.reduce(0,{$0+$1!}))\tCondenseMaxSize: \(ruleSizes.max()!) \
+        \tSumCondenseSize: \(ruleSizes.reduce(0,+)) \
+        \tSum%Bigger: \(ruleDiffsPercent.reduce(0,{$0+$1}))
         """)
         numEqiv += e
         numSameSize += s

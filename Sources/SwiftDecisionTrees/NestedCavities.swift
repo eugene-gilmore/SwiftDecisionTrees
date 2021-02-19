@@ -158,6 +158,8 @@ func correctDecisionBoundaries(forRule rule : Rule, data : DataSet) -> Rule {
 }
 
 public var ruleDiffs: [Int?] = []
+public var ruleDiffsPercent: [Double] = []
+public var ruleSizes: [Int] = []
 
 public func findNextCavity(forClassValue : Int, data : DataSet) -> NCResult? {
     
@@ -232,7 +234,9 @@ public func findNextCavity(forClassValue : Int, data : DataSet) -> NCResult? {
     }
     else {
         ruleDiffs.append(setB.count - setA.count)
-    }*/
+        ruleDiffsPercent.append(Double(setB.count - setA.count)/Double(setA.count))
+    }
+    ruleSizes.append(setB.count)*/
 
     return NCResult(rule: correctDecisionBoundaries(forRule: Rule.AxisSelection(combination.rule), data: data), combinationHistory: combinationHistory)
     //return NCResult(rule: allComboRule!, combinationHistory: combinationHistory)
