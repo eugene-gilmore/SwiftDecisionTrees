@@ -839,12 +839,12 @@ public class PCRegionRule : RegionRule {
 		super.init()
 	}
 
-    enum CodingKeys: CodingKey {
+    enum PCRegionRuleCodingKeys: CodingKey {
         case axisSeperation, axisMin, axisMax, AttributeFlipped
     }
 
 	public required init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let container = try decoder.container(keyedBy: PCRegionRuleCodingKeys.self)
         axisSeperation = try container.decode(Double.self, forKey: .axisSeperation)
         axisMin = try container.decode([Double].self, forKey: .axisMin)
         axisMax = try container.decode([Double].self, forKey: .axisMax)
@@ -854,7 +854,7 @@ public class PCRegionRule : RegionRule {
 
     public override func encode(to encoder: Encoder) throws {
         try super.encode(to: encoder)
-        var container = encoder.container(keyedBy: CodingKeys.self)
+        var container = encoder.container(keyedBy: PCRegionRuleCodingKeys.self)
         try container.encode(axisSeperation, forKey: .axisSeperation)
         try container.encode(axisMin, forKey: .axisMin)
         try container.encode(axisMax, forKey: .axisMax)
@@ -2533,7 +2533,9 @@ public func finishSubTree(node : TreeNode, data : DataSet, fullTrainingSet: Data
                     node.rules = nil
                     node.insideChildRule = nil
                 }
-                node.gainRatio = gainRatio(distribution: Distribution(dataset: data, rule: node.rules!))
+                else {
+                    node.gainRatio = gainRatio(distribution: Distribution(dataset: data, rule: node.rules!))
+                }
             }
         }
         if(stop) {
