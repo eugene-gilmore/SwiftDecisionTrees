@@ -3,10 +3,16 @@ import Foundation
 import Signals
 
 let home = NSHomeDirectory()
-let datasetLocation = home + "/PHD/Datasets/"
-var resultsLocation = datasetLocation+"results/fullv1/"
+let datasetLocation = home + "/PHD/Datasets/new/"
+var resultsLocation = datasetLocation+"../results/new-datasets/NC/"
 let datasets = ["iris", "liver", "cryotherapy", "seeds", "ecoli", "car", "breast-cancer-wisconsin", "glass", "vowel", "page-blocks", "wine", "heart", "credit", "vehicle", "ionosphere",
     "ClimateSimulationCrashes", "leaf", "chronic_kidney_disease", "BreastTissue", "transfusion"]
+/*let datasets = ["arrhythmia", "audiology", "balance-scale", "breast-cancer", "cardiotocography", "cmc",
+                "dermatology", "german", "haberman", "hepatitis", "hungarian-14-heart-disease",
+                //"krkopt",
+                "kr-vs-kp", "lymphography", "mfeat-pix", "newthyroid",
+                "optdigits", "pima-diabetes", "primary-tumor", "segmentation", "sick", "sonar",
+                "soybean", "tae", "thyroid", "tic-tac-toe", "vote", "zoo"]*/
 let NUM_RUNS = 5
 var buildMethod = BuildMethod.NC
 
