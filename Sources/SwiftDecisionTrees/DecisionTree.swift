@@ -1157,8 +1157,12 @@ public func insideRules(data : DataSet, rules : PathToNode) -> DataSet {
                 withMissingValue.append(i)
             }
         }
+        var newWeight = numIncluded/(numIncluded+numExcluded)
+        if(newWeight.isNaN) {
+            newWeight = 1.0
+        }
         for i in withMissingValue {
-            weights[i] =  (weights[i] ?? 1.0) * (numIncluded/(numIncluded+numExcluded))
+            weights[i] =  (weights[i] ?? 1.0) * newWeight
         }
     }
     for i in 0..<data.instances.count {
