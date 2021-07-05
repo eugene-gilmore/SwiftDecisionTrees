@@ -471,6 +471,18 @@ public class DataSet {
         }
         return averages
     }
+
+    public func classStatsForAttribute(attribute : Int) -> [(min: Double, avg: Double, std: Double, max: Double)?] {
+        return (0..<classes.count).map { c in
+            let vals = instances.filter {$0.classIndex == c}.compactMap {$0.values[attribute]}
+            if let min = vals.min(), let max = vals.max(), let avg = vals.mean, let std = vals.sd {
+                return (min, avg, std, max)
+            }
+            else {
+                return nil
+            }
+        }
+    }
     
     public func fillMissingWith(values : [Double]) {
         for i in instances {
@@ -518,14 +530,14 @@ public func loadFromFile(file: String, sep: Character = ",", headingsPresent : B
     let l: [Substring] = f[0].split(separator: sep, omittingEmptySubsequences : false)
     let numValues = l.count
     let classVal = lastIsClass ? Int(String(l.last!)) : 0
-    var attNum = 0
+    var attNum = 1
     for x in (lastIsClass ? l.dropLast() : ArraySlice<Substring>(l)) {
         if(headingsPresent) {
             data.addAttribute(name: String(x))
         }
         else {
-            data.addAttribute(name: "")
-            //data.addAttribute(name: "att \(attNum)")
+            //data.addAttribute(name: "")
+            data.addAttribute(name: "a\(attNum)")
         }
         attNum += 1
     }
